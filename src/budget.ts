@@ -179,7 +179,7 @@ function render(): void {
     .filter((budget): budget is Budget => budget !== null)
     .sort((a, b) => b.month.localeCompare(a.month));
   root.innerHTML = `<div class="app-shell"><aside class="sidebar">
-    <a class="brand" href="#home" aria-label="VaultBudget home"><span class="brand-mark">$</span><span>VaultBudget</span></a>
+    <a class="brand" href="#home" aria-label="Kestral Budget home"><span class="brand-mark">$</span><span>Kestral Budget</span></a>
     <button class="home-link ${state.view === 'home' ? 'active' : ''}" data-action="home"><span class="home-icon">⌂</span>Overview</button>
     <div class="side-section-title"><span>YOUR BUDGETS</span><button class="icon-button" data-action="new-budget" aria-label="Create a new budget" title="Create a new budget">+</button></div>
     <nav class="budget-nav" aria-label="Your budgets">${series.length ? series.map((b) => `<button class="budget-nav-item ${b.seriesId === budget?.seriesId && state.view === 'budget' ? 'active' : ''}" data-action="select-series" data-id="${esc(b.seriesId)}"><span class="nav-month-icon">${seriesBudgets(b.seriesId).length}</span><span class="nav-budget-copy"><strong>${esc(b.name)}</strong><small>${seriesBudgets(b.seriesId).length} ${seriesBudgets(b.seriesId).length === 1 ? 'month' : 'months'}</small></span></button>`).join('') : '<p class="nav-empty">Your budgets<br>will show up here.</p>'}</nav>
