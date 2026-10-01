@@ -36,7 +36,7 @@ jobs:
       - run: npm run icons
       - run: iconutil -c icns assets/kestral-budget.iconset --output assets/kestral-budget.icns
       - run: npm run build
-      - run: npx electron-builder --mac dmg --arm64 --config.directories.output=release/mac
+      - run: npx electron-builder --mac dmg --arm64 --config.directories.output=release/mac --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: KestralBudget-mac-arm64

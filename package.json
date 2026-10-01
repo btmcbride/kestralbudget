@@ -16,8 +16,8 @@
     "icons": "node scripts/build-icons.mjs",
     "typecheck": "tsc --noEmit",
     "desktop": "npm run icons && npm run build && electron .",
-    "desktop:dist": "npm run icons && npm run build && electron-builder --win nsis --config.directories.output=release/windows",
-    "desktop:dist:mac": "npm run icons && iconutil -c icns assets/kestral-budget.iconset --output assets/kestral-budget.icns && npm run build && electron-builder --mac dmg --arm64 --config.directories.output=release/mac"
+    "desktop:dist": "npm run icons && npm run build && electron-builder --win nsis --config.directories.output=release/windows --publish never",
+    "desktop:dist:mac": "npm run icons && iconutil -c icns assets/kestral-budget.iconset --output assets/kestral-budget.icns && npm run build && electron-builder --mac dmg --arm64 --config.directories.output=release/mac --publish never"
   },
   "build": {
     "appId": "com.kestralbudget.desktop",
