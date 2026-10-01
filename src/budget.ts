@@ -1,6 +1,14 @@
 import './budget.css';
 import './budget-workflow.css';
 import './branding.css';
+import './backup.css';
+import './transactions.css';
+import './recurring-expenses.css';
+import './guided-tour.css';
+import './budget-feedback.css';
+import { buildExpenseEntriesForMonth, buildIncomeEntriesForMonth } from './paycheck-scheduler.js';
+import { getDefaultBudgetId, setDefaultBudgetId } from './preferences.js';
+import { createBackup, parseBackup } from './backup.js';
 
 const KEY = 'cryptic-budgets.v1';
 const GROUPS: StandardBudgetGroup[] = [
@@ -13,6 +21,7 @@ const GROUPS: StandardBudgetGroup[] = [
 ];
 type StandardGroupId = 'income' | 'bills' | 'expenses' | 'subscriptions' | 'debts' | 'savings';
 type BudgetGroupId = StandardGroupId | `custom:${string}`;
+type PayFrequency = 'weekly' | 'biweekly' | 'monthly';
 
 interface BudgetGroup {
   id: BudgetGroupId;
@@ -24,11 +33,33 @@ interface StandardBudgetGroup extends BudgetGroup {
   id: StandardGroupId;
 }
 
+interface RecurringIncomeSchedule {
+  id: string;
+  name: string;
+  amount: number;
+  frequency: PayFrequency;
+  intervalDays: number;
+  nextPayday: string;
+}
+
+interface RecurringExpenseSchedule {
+  id: string;
+  categoryId: string;
+  name: string;
+  amount: number;
+  frequency: PayFrequency;
+  intervalDays: number;
+  nextDueDate: string;
+  paused?: boolean;
+}
+
 interface BudgetEntry {
   id: string;
   name: string;
   planned: number;
   actual: number;
+  scheduleId?: string | null;
+  scheduledDate?: string;
 }
 
 interface BudgetTransaction {
@@ -57,12 +88,19 @@ interface Budget {
   selectedTypes: BudgetGroupId[];
   categories: BudgetCategory[];
   transactions: BudgetTransaction[];
+  incomeSchedules: RecurringIncomeSchedule[];
+  expenseSchedules: RecurringExpenseSchedule[];
+}
+
+interface AppPreferences {
+  defaultBudgetId: string | null;
 }
 
 interface AppState {
   budgets: Budget[];
   active: string | null;
   view: 'home' | 'budget';
+  preferences: AppPreferences;
 }
 
 interface WizardState {
@@ -85,6 +123,22 @@ interface DashboardTotals {
 }
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+const PAY_FREQUENCIES: Array<{ value: PayFrequency; label: string; description: string }> = [
+  { value: 'weekly', label: 'Weekly', description: 'Every 7 days' },
+  { value: 'biweekly', label: 'Biweekly', description: 'Every 14 days' },
+  { value: 'monthly', label: 'Monthly', description: 'Once per month on the same day' },
+];
+const GUIDED_TOUR_STEPS: Array<{ selector: string; view: 'overview' | 'transactions'; title: string; body: string }> = [
+  { selector: '.budget-tabs:not(.budget-view-tabs)', view: 'overview', title: 'Move between months', body: 'The month tabs switch between months in this budget. Choose + to create a month: planned items carry forward, actuals reset, and the previous month’s actual leftover becomes carryover.' },
+  { selector: '.metric-grid', view: 'overview', title: 'Read your monthly totals', body: 'Income and carryover show available money. Planned Left Over uses your plan; Actual Left Over uses recorded activity. Compare them to see whether your month is tracking as expected.' },
+  { selector: '.categories-section .section-title-row', view: 'overview', title: 'Organize your plan', body: 'Categories group budget items into areas like Bills, Expenses, and Savings. Use Add category to create a new group; use the + beside a group to add an item.' },
+  { selector: '.category-grid .category-card', view: 'overview', title: 'Update planned amounts', body: 'Click a budget item to edit its name, planned amount, and actual amount. Use Add item for another line, or Schedule item for a recurring planned expense. Scheduled items do not record actual spending automatically.' },
+  { selector: '.budget-view-tabs', view: 'overview', title: 'Switch to Transactions', body: 'Overview summarizes the plan. Transactions is the dated record of money in and out. Add a transaction when you record real activity; link it to a budget item when useful.' },
+  { selector: '.transactions-panel .transaction-tools', view: 'transactions', title: 'Find and manage activity', body: 'Search by description, category, or date and filter by category. Select visible results for bulk deletion. Use Edit to change a record, or Duplicate to create a prefilled copy without changing the original.' },
+  { selector: '.budget-menu', view: 'overview', title: 'Budget actions', body: 'Open the ellipsis menu to set this budget as your default, delete the selected month, or delete the entire budget and its months. Delete actions ask you to confirm first.' },
+  { selector: '.sidebar .backup-actions', view: 'transactions', title: 'Protect your data', body: 'Export backup downloads all budgets and preferences. Restore backup replaces current data after confirmation.' },
+];
+const payFrequencyInterval = (frequency: PayFrequency): number => ({ weekly: 7, biweekly: 14, monthly: 30 }[frequency] ?? 14);
 const root = document.createElement('div');
 root.id = 'budget-app';
 const dialog = document.createElement('dialog');
@@ -100,23 +154,59 @@ const uid = (): string => {
 };
 const defaultCategories = (types: BudgetGroupId[] = GROUPS.map((g) => g.id)): BudgetCategory[] => GROUPS.filter((g) => types.includes(g.id)).map((g) => ({ id: uid(), type: g.id, name: g.name, entries: [] }));
 
-function normalizeState(budgets: Budget[], active: string | null | undefined): AppState {
+function normalizeState(budgets: Budget[], active: string | null | undefined, preferences: Partial<AppPreferences> = {}): AppState {
+  const normalizedBudgets = budgets.filter((budget) => Array.isArray(budget.categories)).map((budget) => ({
+    ...budget,
+    seriesId: budget.seriesId || budget.id,
+    carryover: Number(budget.carryover) || 0,
+    selectedTypes: budget.selectedTypes || GROUPS.map((group) => group.id),
+    transactions: Array.isArray(budget.transactions) ? budget.transactions.map((transaction) => ({ ...transaction, entryId: transaction.entryId ?? null })) : [],
+    incomeSchedules: Array.isArray(budget.incomeSchedules) ? budget.incomeSchedules.map((schedule) => {
+      const frequency = (schedule.frequency as PayFrequency | undefined) || ((Number(schedule.intervalDays) === 7) ? 'weekly' : (Number(schedule.intervalDays) === 14) ? 'biweekly' : 'monthly');
+      return {
+        ...schedule,
+        amount: Number(schedule.amount) || 0,
+        frequency,
+        intervalDays: payFrequencyInterval(frequency),
+      };
+    }) : [],
+    expenseSchedules: Array.isArray(budget.expenseSchedules) ? budget.expenseSchedules.map((schedule) => {
+      const frequency = (schedule.frequency as PayFrequency | undefined) || ((Number(schedule.intervalDays) === 7) ? 'weekly' : (Number(schedule.intervalDays) === 14) ? 'biweekly' : 'monthly');
+      return {
+        ...schedule,
+        amount: Number(schedule.amount) || 0,
+        frequency,
+        intervalDays: payFrequencyInterval(frequency),
+        paused: Boolean(schedule.paused),
+      };
+    }) : [],
+  }));
+  const defaultBudgetId = getDefaultBudgetId(preferences);
+  const defaultSeriesBudget = defaultBudgetId ? normalizedBudgets.filter((budget) => budget.seriesId === defaultBudgetId).at(-1) ?? null : null;
+  const validActive = active && normalizedBudgets.some((budget) => budget.id === active) ? active : null;
+  const resolvedActive = validActive ?? defaultSeriesBudget?.id ?? normalizedBudgets.at(-1)?.id ?? null;
   return {
-    budgets: budgets.filter((budget) => Array.isArray(budget.categories)).map((budget) => ({ ...budget, seriesId: budget.seriesId || budget.id, carryover: Number(budget.carryover) || 0, selectedTypes: budget.selectedTypes || GROUPS.map((group) => group.id), transactions: Array.isArray(budget.transactions) ? budget.transactions.map((transaction) => ({ ...transaction, entryId: transaction.entryId ?? null })) : [] })),
-    active: active ?? null,
+    budgets: normalizedBudgets,
+    active: resolvedActive,
     view: 'home',
+    preferences: { defaultBudgetId: defaultBudgetId ?? null },
   };
 }
 function load(): AppState {
   try {
-    const data = JSON.parse(localStorage.getItem(KEY) ?? 'null') as { budgets?: Budget[]; active?: string | null } | null;
-    if (Array.isArray(data?.budgets)) return normalizeState(data.budgets, data.active);
+    const data = JSON.parse(localStorage.getItem(KEY) ?? 'null') as { budgets?: Budget[]; active?: string | null; preferences?: Partial<AppPreferences> } | null;
+    if (Array.isArray(data?.budgets)) return normalizeState(data.budgets, data.active, data.preferences);
   } catch { /* Start with a clean local workspace if stored data is invalid. */ }
   return normalizeState([], null);
 }
-const state: AppState = { budgets: [], active: null, view: 'home' };
+const state: AppState = { budgets: [], active: null, view: 'home', preferences: { defaultBudgetId: null } };
 let wizard: WizardState | null = null;
+let guidedTourStep = 0;
+let guidedTourLayer: HTMLElement | null = null;
 let dashboardTab: 'overview' | 'transactions' = 'overview';
+let transactionSearch = '';
+let transactionCategoryFilter = 'all';
+const selectedTransactionIds = new Set<string>();
 let saveTimer: number | undefined;
 let saveQueue: Promise<void> = Promise.resolve();
 const HTML_ENTITIES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -139,11 +229,11 @@ const displayDate = (date: string): string => {
   const [year, month, day] = date.split('-').map(Number);
   return year && month && day ? new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : date;
 };
-async function putState(budgets: Budget[], active: string | null): Promise<void> {
+async function putState(budgets: Budget[], active: string | null, preferences: AppPreferences = state.preferences): Promise<void> {
   const response = await fetch('/api/state', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ budgets, active }),
+    body: JSON.stringify({ budgets, active, preferences }),
   });
   if (!response.ok) throw new Error(`Budget save failed (${response.status}).`);
 }
@@ -152,7 +242,7 @@ function persist() {
   if (status) status.textContent = 'Saving';
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    const payload = JSON.stringify({ budgets: state.budgets, active: state.active });
+    const payload = JSON.stringify({ budgets: state.budgets, active: state.active, preferences: state.preferences });
     saveQueue = saveQueue.catch(() => undefined).then(async () => {
       const response = await fetch('/api/state', {
         method: 'PUT',
@@ -173,17 +263,19 @@ async function initialize(): Promise<void> {
   try {
     const response = await fetch('/api/state');
     if (!response.ok) throw new Error(`Budget load failed (${response.status}).`);
-    const serverState = await response.json() as { budgets?: Budget[]; active?: string | null; initialized?: boolean };
+    const serverState = await response.json() as { budgets?: Budget[]; active?: string | null; initialized?: boolean; preferences?: Partial<AppPreferences> };
     if (serverState.initialized) {
       if (!Array.isArray(serverState.budgets)) throw new Error('The saved budget data is invalid.');
-      const normalized = normalizeState(serverState.budgets, serverState.active);
+      const normalized = normalizeState(serverState.budgets, serverState.active, serverState.preferences);
       state.budgets = normalized.budgets;
       state.active = normalized.active;
+      state.preferences = normalized.preferences;
     } else {
       const legacyState = load();
       state.budgets = legacyState.budgets;
       state.active = legacyState.active;
-      await putState(state.budgets, state.active);
+      state.preferences = legacyState.preferences;
+      await putState(state.budgets, state.active, state.preferences);
     }
     render();
   } catch (error) {
@@ -217,6 +309,28 @@ function totals(budget: Budget): DashboardTotals {
   const carryover = Number(budget.carryover) || 0;
   return { income, out, carryover, plannedLeft: income.planned + carryover - out.planned, actualLeft: income.actual + carryover - out.actual };
 }
+function nextSchedulePayday(budget: Budget): { name: string; amount: number; date: string; frequency: PayFrequency } | null {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const upcoming = budget.incomeSchedules
+    .map((schedule) => {
+      const start = new Date(`${schedule.nextPayday}T00:00:00`);
+      let cursor = new Date(start);
+      const interval = payFrequencyInterval(schedule.frequency);
+      while (cursor < now) {
+        if (schedule.frequency === 'monthly') {
+          const nextMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, Number(schedule.nextPayday.slice(8, 10)));
+          cursor = nextMonth;
+        } else {
+          cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + interval);
+        }
+      }
+      return { name: schedule.name, amount: schedule.amount, date: `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`, frequency: schedule.frequency };
+    })
+    .filter((entry) => entry.date)
+    .sort((a, b) => a.date.localeCompare(b.date))[0];
+  return upcoming ?? null;
+}
 const signed = (n: number): string => `${n > 0 ? '+' : n < 0 ? '−' : ''}${fmt(Math.abs(n))}`;
 
 function requiredElement<T extends Element>(parent: ParentNode, selector: string): T {
@@ -227,6 +341,8 @@ function requiredElement<T extends Element>(parent: ParentNode, selector: string
 
 function render(): void {
   const budget = current();
+  const currentTransactionIds = new Set(budget?.transactions.map((transaction) => transaction.id) ?? []);
+  for (const id of selectedTransactionIds) if (!currentTransactionIds.has(id)) selectedTransactionIds.delete(id);
   const series = [...new Set(state.budgets.map((b) => b.seriesId))]
     .map((seriesId) => latestInSeries(seriesId))
     .filter((budget): budget is Budget => budget !== null)
@@ -234,13 +350,129 @@ function render(): void {
   root.innerHTML = `<div class="app-shell"><aside class="sidebar">
     <a class="brand" href="#home" aria-label="Kestral Budget home"><span class="brand-mark"><img src="/kestral-mark.png" alt=""></span><span>Kestral Budget</span></a>
     <button class="home-link ${state.view === 'home' ? 'active' : ''}" data-action="home"><span class="home-icon">⌂</span>Overview</button>
-    <div class="side-section-title"><span>YOUR BUDGETS</span><button class="icon-button" data-action="new-budget" aria-label="Create a new budget" title="Create a new budget">+</button></div>
-    <nav class="budget-nav" aria-label="Your budgets">${series.length ? series.map((b) => `<button class="budget-nav-item ${b.seriesId === budget?.seriesId && state.view === 'budget' ? 'active' : ''}" data-action="select-series" data-id="${esc(b.seriesId)}"><span class="nav-month-icon">${seriesBudgets(b.seriesId).length}</span><span class="nav-budget-copy"><strong>${esc(b.name)}</strong><small>${seriesBudgets(b.seriesId).length} ${seriesBudgets(b.seriesId).length === 1 ? 'month' : 'months'}</small></span></button>`).join('') : '<p class="nav-empty">Your budgets<br>will show up here.</p>'}</nav>
+    <div class="side-section-title"><span>YOUR BUDGETS</span><button class="icon-button" data-action="new-budget" aria-label="Create a new budget" title="Create a new budget" ${state.budgets.length ? '' : 'hidden'}>+</button></div>
+    <nav class="budget-nav" aria-label="Your budgets">${series.length ? series.map((b) => `<button class="budget-nav-item ${b.seriesId === budget?.seriesId && state.view === 'budget' ? 'active' : ''}" data-action="select-series" data-id="${esc(b.seriesId)}"><span class="nav-month-icon">${seriesBudgets(b.seriesId).length}</span><span class="nav-budget-copy"><strong>${esc(b.name)}</strong><small>${seriesBudgets(b.seriesId).length} ${seriesBudgets(b.seriesId).length === 1 ? 'month' : 'months'}</small></span>${b.seriesId === state.preferences.defaultBudgetId ? '<span class="default-budget-marker" role="img" aria-label="Default budget" title="Default budget">★</span>' : ''}</button>`).join('') : '<p class="nav-empty">Your budgets<br>will show up here.</p>'}</nav>
+    <div class="backup-actions"><button type="button" data-action="export-backup">Export backup</button><button type="button" data-action="import-backup">Restore backup</button><input id="backup-file" type="file" accept="application/json,.json" hidden></div>
     <div class="sidebar-bottom"><span class="saved-dot"></span><span>Stored in app database</span><span id="save-status">All changes saved</span></div></aside>
-    <main class="main-area"><header class="topbar"><div class="breadcrumb"><span>PERSONAL FINANCE</span><span class="crumb-divider">/</span><strong>${state.view === 'home' ? 'Overview' : esc(budget?.name)}</strong></div><button class="button button-primary top-new" data-action="new-budget"><span>+</span> New budget</button></header>${budget ? dashboard(budget, seriesBudgets(budget.seriesId)) : welcome()}</main></div>`;
+    <main class="main-area"><header class="topbar"><div class="breadcrumb"><span>PERSONAL FINANCE</span><span class="crumb-divider">/</span><strong>${state.view === 'home' ? 'Overview' : esc(budget?.name)}</strong></div><div class="topbar-actions"></div></header>${budget ? dashboard(budget, seriesBudgets(budget.seriesId)) : welcome()}</main></div>`;
+  const topbar = requiredElement<HTMLElement>(root, '.topbar');
+  const topbarActions = requiredElement<HTMLElement>(topbar, '.topbar-actions');
+  if (state.budgets.length) {
+    const tourButton = document.createElement('button');
+    tourButton.type = 'button';
+    tourButton.className = 'icon-button tour-button';
+    tourButton.dataset.action = 'guided-tour';
+    tourButton.setAttribute('aria-label', 'Start app tour');
+    tourButton.dataset.tooltip = 'Replay the guided tour';
+    tourButton.title = 'Replay the guided tour';
+    tourButton.innerHTML = '<span class="tour-cap" aria-hidden="true">🎓</span><span>App tour</span>';
+    topbarActions.append(tourButton);
+  }
+  if (budget?.expenseSchedules.length) {
+    const categoryHeading = root.querySelector<HTMLElement>('.categories-section .section-title-row > div');
+    if (categoryHeading) {
+      const manageButton = document.createElement('button');
+      manageButton.type = 'button';
+      manageButton.className = 'text-action recurring-manager-trigger';
+      manageButton.dataset.action = 'manage-expense-schedules';
+      manageButton.textContent = `Manage recurring (${budget.expenseSchedules.length})`;
+      categoryHeading.append(manageButton);
+    }
+  }
+  applyTransactionFilters();
+}
+function setupCompleteDialog(): void {
+  dialog.innerHTML = '<section class="tour-content"><div class="dialog-topline"><span class="dialog-icon">✓</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">BUDGET SETUP COMPLETE</p><h2>Your budget is ready</h2><p class="dialog-copy">Take a quick guided tour of the overview, categories, and transactions, or start exploring on your own.</p><div class="dialog-actions"><button class="button button-secondary" data-action="setup-finish" type="button">Maybe later</button><button class="button button-primary" data-action="guided-tour" type="button">Take a guided tour</button></div></section>';
+  dialog.showModal();
+}
+function finishGuidedTour(): void {
+  guidedTourLayer?.remove();
+  guidedTourLayer = null;
+  root.inert = false;
+  root.querySelector<HTMLButtonElement>('[data-action="guided-tour"]')?.focus();
+}
+function showGuidedTour(step = 0): void {
+  guidedTourStep = Math.max(0, Math.min(step, GUIDED_TOUR_STEPS.length - 1));
+  const currentStep = GUIDED_TOUR_STEPS[guidedTourStep];
+  if (dialog.open) dialog.close();
+  if (currentStep.view && dashboardTab !== currentStep.view) {
+    dashboardTab = currentStep.view;
+    render();
+  }
+  const target = root.querySelector<HTMLElement>(currentStep.selector) || root.querySelector<HTMLElement>('.topbar');
+  if (!target) return;
+  target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  root.inert = true;
+  if (!guidedTourLayer) {
+    guidedTourLayer = document.createElement('div');
+    guidedTourLayer.className = 'guided-tour-layer';
+    guidedTourLayer.innerHTML = '<div class="tour-spotlight"></div><section class="tour-callout" role="dialog" aria-modal="true" aria-labelledby="tour-title"></section>';
+    document.body.append(guidedTourLayer);
+  }
+  const spotlight = requiredElement<HTMLElement>(guidedTourLayer, '.tour-spotlight');
+  const callout = requiredElement<HTMLElement>(guidedTourLayer, '.tour-callout');
+  callout.innerHTML = `<div class="tour-callout-head"><span class="tour-step-count">${guidedTourStep + 1} / ${GUIDED_TOUR_STEPS.length}</span><button class="tour-close" type="button" data-action="tour-finish" aria-label="Close tour">×</button></div><div class="tour-progress" aria-hidden="true">${GUIDED_TOUR_STEPS.map((_, index) => `<span class="${index <= guidedTourStep ? 'done' : ''}"></span>`).join('')}</div><h2 id="tour-title">${esc(currentStep.title)}</h2><p>${esc(currentStep.body)}</p><div class="tour-callout-actions"><button class="button button-secondary" data-action="tour-finish" type="button">Skip tour</button><button class="button button-secondary" data-action="tour-previous" type="button" ${guidedTourStep === 0 ? 'disabled' : ''}>Back</button><button class="button button-primary" data-action="tour-next" type="button">${guidedTourStep === GUIDED_TOUR_STEPS.length - 1 ? 'Finish' : 'Next'}</button></div>`;
+  const rect = target.getBoundingClientRect();
+  const padding = 5;
+  spotlight.style.left = `${Math.max(4, rect.left - padding)}px`;
+  spotlight.style.top = `${Math.max(4, rect.top - padding)}px`;
+  spotlight.style.width = `${Math.min(window.innerWidth - Math.max(4, rect.left - padding) - 4, rect.width + padding * 2)}px`;
+  spotlight.style.height = `${Math.min(window.innerHeight - Math.max(4, rect.top - padding) - 4, rect.height + padding * 2)}px`;
+  const calloutWidth = Math.min(390, window.innerWidth - 32);
+  callout.style.width = `${calloutWidth}px`;
+  const calloutHeight = callout.offsetHeight;
+  const left = Math.min(Math.max(16, rect.left), window.innerWidth - calloutWidth - 16);
+  const below = rect.bottom + 14;
+  const top = below + calloutHeight <= window.innerHeight - 16
+    ? below
+    : rect.top - calloutHeight - 14 >= 16
+      ? rect.top - calloutHeight - 14
+      : Math.max(16, (window.innerHeight - calloutHeight) / 2);
+  callout.style.left = `${left}px`;
+  callout.style.top = `${top}px`;
+  callout.querySelector<HTMLButtonElement>('[data-action="tour-next"]')?.focus();
 }
 function welcome(): string {
   return `<section class="welcome"><p class="overline">A CLEAR VIEW OF YOUR MONEY</p><h1>Give every dollar<br>somewhere to go.</h1><p class="welcome-copy">Set up a monthly budget, plan the essentials, and see what is left at a glance.</p><button class="button button-primary" data-action="new-budget"><span>+</span> Create your first budget</button></section>`;
+}
+function exportBackup(): void {
+  const contents = createBackup({ budgets: state.budgets, active: state.active, preferences: state.preferences });
+  const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
+  const link = document.createElement('a');
+  const date = new Date().toISOString().slice(0, 10);
+  link.href = url;
+  link.download = `kestralbudget-backup-${date}.json`;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+async function importBackup(file: File): Promise<void> {
+  let imported: ReturnType<typeof parseBackup>;
+  try {
+    imported = parseBackup(await file.text());
+  } catch (error) {
+    console.error(error);
+    window.alert('This file is not a valid Kestral Budget backup.');
+    return;
+  }
+  if (!window.confirm('Replace all current budgets and preferences with this backup? This cannot be undone.')) return;
+  const normalized = normalizeState(imported.budgets as Budget[], imported.active, imported.preferences);
+  root.inert = true;
+  clearTimeout(saveTimer);
+  try {
+    await saveQueue.catch(() => undefined);
+    await putState(normalized.budgets, normalized.active, normalized.preferences);
+    state.budgets = normalized.budgets;
+    state.active = normalized.active;
+    state.preferences = normalized.preferences;
+    state.view = 'home';
+    wizard = null;
+    render();
+  } catch (error) {
+    console.error(error);
+    window.alert('The backup could not be saved. Your current data was not changed.');
+  } finally {
+    root.inert = false;
+  }
 }
 function dashboard(b: Budget, budgets: Budget[]): string {
   const t = totals(b), income = t.income;
@@ -252,25 +484,53 @@ function dashboard(b: Budget, budgets: Budget[]): string {
     return category && category.type !== 'income' ? [{ name: transaction.description, category: category.name, type: category.type, actual: transaction.amount }] : [];
   });
   const top = [...topEntries, ...topTransactions].filter((entry) => entry.actual > 0).sort((a, z) => z.actual - a.actual).slice(0, 20);
+  if (transactionCategoryFilter !== 'all' && !b.categories.some((category) => category.id === transactionCategoryFilter)) transactionCategoryFilter = 'all';
   const transactionRows = [...b.transactions].sort((a, z) => z.date.localeCompare(a.date)).map((transaction) => {
     const category = b.categories.find((item) => item.id === transaction.categoryId);
     const isIncome = category?.type === 'income';
-    return `<tr><td>${esc(displayDate(transaction.date))}</td><td>${esc(transaction.description)}</td><td>${esc(category?.name ?? 'Uncategorized')}</td><td class="${isIncome ? 'positive' : 'negative'}">${isIncome ? '+' : '−'}${fmt(transaction.amount)}</td><td class="transaction-actions"><button class="text-action" data-action="edit-transaction" data-transaction="${esc(transaction.id)}">Edit</button><button class="text-action transaction-delete" data-action="delete-transaction" data-transaction="${esc(transaction.id)}">Delete</button></td></tr>`;
+    const searchText = [transaction.description, category?.name ?? 'Uncategorized', transaction.date, displayDate(transaction.date)].join(' ').toLocaleLowerCase();
+    return `<tr data-transaction-row data-transaction-id="${esc(transaction.id)}" data-category-id="${esc(transaction.categoryId)}" data-search="${esc(searchText)}"><td><input class="transaction-select" type="checkbox" data-transaction-check="${esc(transaction.id)}" aria-label="Select ${esc(transaction.description)}" ${selectedTransactionIds.has(transaction.id) ? 'checked' : ''}></td><td>${esc(displayDate(transaction.date))}</td><td>${esc(transaction.description)}</td><td>${esc(category?.name ?? 'Uncategorized')}</td><td class="${isIncome ? 'positive' : 'negative'}">${isIncome ? '+' : '−'}${fmt(transaction.amount)}</td><td class="transaction-actions"><button class="text-action" data-action="edit-transaction" data-transaction="${esc(transaction.id)}">Edit</button><button class="text-action transaction-delete" data-action="delete-transaction" data-transaction="${esc(transaction.id)}">Delete</button></td></tr>`;
   }).join('');
+  const nextPaycheck = nextSchedulePayday(b);
   return `<section class="dashboard"><div class="budget-tabs" role="tablist" aria-label="Choose a month">${budgets.map((item) => `<button class="month-tab ${item.id === b.id ? 'selected' : ''}" data-action="select-month" data-id="${esc(item.id)}" role="tab" aria-selected="${item.id === b.id}">${esc(monthText(item.month))}</button>`).join('')}<button class="month-add" data-action="new-month" aria-label="Create a new month" title="Create a new month">+</button></div>
-    <div class="page-heading"><div><p class="overline">MONTHLY OVERVIEW <span class="heading-separator">/</span> ${esc(monthText(b.month).toUpperCase())}</p><h1>${esc(b.name)}</h1><p class="heading-subtitle">Your plan, actuals, and what remains this month.</p></div><div class="heading-actions"><button class="button button-secondary" data-action="add-category" ${dashboardTab === 'transactions' ? 'hidden' : ''}>＋ Category</button><button class="button button-secondary" data-action="new-month">New month</button><details class="budget-menu"><summary class="icon-button" aria-label="Budget actions" title="Budget actions">⋯</summary><div class="budget-menu-panel"><button type="button" data-action="delete-month">Delete this month</button><button class="is-danger" type="button" data-action="delete-budget">Delete entire budget</button></div></details></div></div>
+    <div class="page-heading"><div><p class="overline">MONTHLY OVERVIEW <span class="heading-separator">/</span> ${esc(monthText(b.month).toUpperCase())}</p><h1>${esc(b.name)}</h1><p class="heading-subtitle">Your plan, actuals, and what remains this month.</p></div><div class="heading-actions"><details class="budget-menu"><summary class="icon-button" aria-label="Budget actions" title="Budget actions">⋯</summary><div class="budget-menu-panel"><button type="button" data-action="set-default-budget" data-id="${esc(b.seriesId)}">${b.seriesId === state.preferences.defaultBudgetId ? 'Use this as default' : 'Set as default budget'}</button><button type="button" data-action="delete-month">Delete this month</button><button class="is-danger" type="button" data-action="delete-budget">Delete entire budget</button></div></details></div></div>
     <div class="budget-tabs budget-view-tabs" role="tablist" aria-label="Budget view"><button class="month-tab ${dashboardTab === 'overview' ? 'selected' : ''}" data-action="budget-view" data-view="overview" role="tab" aria-selected="${dashboardTab === 'overview'}">Overview</button><button class="month-tab ${dashboardTab === 'transactions' ? 'selected' : ''}" data-action="budget-view" data-view="transactions" role="tab" aria-selected="${dashboardTab === 'transactions'}">Transactions</button></div>
     <section class="metric-grid" aria-label="Budget summary" ${dashboardTab === 'transactions' ? 'hidden' : ''}>
       <article class="metric-card income-card"><div class="metric-label"><span class="metric-icon">↗</span>INCOME + CARRYOVER</div><div class="metric-value">${fmt(income.actual + t.carryover)}<span>available</span></div><div class="metric-foot"><span>Income ${fmt(income.actual)}</span><span>Carryover ${signed(t.carryover)}</span></div></article>
-      <article class="metric-card"><div class="metric-label"><span class="metric-icon">◷</span>PLANNED LEFT OVER</div><div class="metric-value ${t.plannedLeft < 0 ? 'negative' : ''}">${fmt(t.plannedLeft)}</div><div class="metric-foot"><span>${fmt(income.planned)} income</span><span>− ${fmt(t.out.planned)} planned</span></div></article>
+      <article class="metric-card"><div class="metric-label"><span class="metric-icon">◷</span>PLANNED LEFT OVER</div><div class="metric-value ${t.plannedLeft < 0 ? 'negative' : ''}">${fmt(t.plannedLeft)}</div><div class="metric-foot"><span>${fmt(income.planned)} income</span><span>− ${fmt(t.out.planned)} planned</span></div>${t.plannedLeft > 0.005 ? '<p class="unallocated-note"><span aria-hidden="true">•</span>Consider assigning the remainder for a zero-based plan.</p>' : ''}</article>
       <article class="metric-card"><div class="metric-label"><span class="metric-icon">↘</span>ACTUAL LEFT OVER</div><div class="metric-value ${t.actualLeft < 0 ? 'negative' : 'highlight-value'}">${fmt(t.actualLeft)}</div><div class="metric-foot"><span>${fmt(income.actual)} income</span><span>− ${fmt(t.out.actual)} actual</span></div></article>
       <article class="metric-card"><div class="metric-label"><span class="metric-icon">≋</span>ALLOCATED</div><div class="metric-value">${fmt(t.out.planned)}<span>planned</span></div><div class="metric-foot"><span>Actual ${fmt(t.out.actual)}</span><span class="${t.out.actual > t.out.planned ? 'negative' : 'positive'}">${signed(t.out.actual - t.out.planned)}</span></div></article>
     </section>
-    <div class="dashboard-grid" ${dashboardTab === 'transactions' ? 'hidden' : ''}><section class="panel"><div class="panel-heading"><div><p class="panel-kicker">AT A GLANCE</p><h2>Income & allocations</h2></div><button class="icon-button add-small" data-action="add-category" aria-label="Add category">+</button></div>
-      <div class="summary-income"><span><i class="type-dot green"></i>Income</span><strong>${fmt(income.planned)}</strong><span>${fmt(income.actual)}</span><span class="${income.actual >= income.planned ? 'positive' : 'negative'}">${signed(income.actual - income.planned)}</span></div>${t.carryover ? `<div class="summary-income carryover-row"><span><i class="type-dot teal"></i>Opening carryover</span><strong>${fmt(t.carryover)}</strong><span>${fmt(t.carryover)}</span><span>From prior month</span></div>` : ''}<div class="table-scroll"><table><thead><tr><th>TYPE</th><th>PLANNED</th><th>ACTUAL</th><th>DIFF</th></tr></thead><tbody>${typeRows}</tbody></table></div><div class="table-legend"><span>Planned vs actual amounts</span><span>Diff = actual − planned</span></div></section>
+    <div class="dashboard-grid" ${dashboardTab === 'transactions' ? 'hidden' : ''}><section class="panel"><div class="panel-heading"><div><p class="panel-kicker">AT A GLANCE</p><h2>Income & allocations</h2></div></div>
+      <div class="summary-income"><span><i class="type-dot green"></i>Income</span><strong>${fmt(income.planned)}</strong><span>${fmt(income.actual)}</span><span class="${income.actual >= income.planned ? 'positive' : 'negative'}">${signed(income.actual - income.planned)}</span></div>${nextPaycheck ? `<div class="summary-income carryover-row"><span><i class="type-dot green"></i>Next scheduled payday</span><strong>${esc(nextPaycheck.name)}</strong><span>${esc(displayDate(nextPaycheck.date))}</span><span>${fmt(nextPaycheck.amount)}</span></div>` : ''}${t.carryover ? `<div class="summary-income carryover-row"><span><i class="type-dot teal"></i>Opening carryover</span><strong>${fmt(t.carryover)}</strong><span>${fmt(t.carryover)}</span><span>From prior month</span></div>` : ''}<div class="table-scroll"><table><thead><tr><th>TYPE</th><th>PLANNED</th><th>ACTUAL</th><th>DIFF</th></tr></thead><tbody>${typeRows}</tbody></table></div><div class="table-legend"><span>Planned vs actual amounts</span><span>Diff = actual − planned</span></div></section>
       <section class="panel"><div class="panel-heading"><div><p class="panel-kicker">WHERE IT WENT</p><h2>Top spending</h2></div><span class="count-badge">${top.length} / 20</span></div>${top.length ? `<ol class="top-list">${top.map((entry, index) => `<li><span class="rank">${String(index + 1).padStart(2, '0')}</span><span class="top-copy"><strong>${esc(entry.name)}</strong><small>${esc(entry.category)} · ${group(entry.type).name}</small></span><span class="top-amount">${fmt(entry.actual)}</span></li>`).join('')}</ol>` : '<div class="quiet-empty">Actual spending will appear here as you record it.</div>'}</section></div>
     <section class="categories-section" ${dashboardTab === 'transactions' ? 'hidden' : ''}><div class="section-title-row"><div><p class="panel-kicker">YOUR PLAN</p><h2>Budget categories</h2></div><button class="button button-secondary" data-action="add-category">＋ Add category</button></div><div class="category-grid">${groups.map((g) => categoryCard(g, b)).join('')}</div></section>
-    <section class="transactions-panel panel" ${dashboardTab === 'overview' ? 'hidden' : ''}><div class="panel-heading"><div><p class="panel-kicker">RECORDED ACTIVITY</p><h2>Transactions</h2></div><div class="panel-heading-actions"><span class="count-badge">${b.transactions.length}</span><button class="button button-primary" data-action="new-transaction"><span>+</span> Add transaction</button></div></div>${transactionRows ? `<div class="table-scroll"><table><thead><tr><th>DATE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>AMOUNT</th><th></th></tr></thead><tbody>${transactionRows}</tbody></table></div>` : '<div class="quiet-empty">No transactions recorded this month.</div>'}</section></section>`;
+    <section class="transactions-panel panel" ${dashboardTab === 'overview' ? 'hidden' : ''}><div class="panel-heading"><div><p class="panel-kicker">RECORDED ACTIVITY</p><h2>Transactions</h2></div><div class="panel-heading-actions"><span class="count-badge">${b.transactions.length}</span><button class="button button-primary" data-action="new-transaction"><span>+</span> Add transaction</button></div></div><div class="transaction-tools"><label class="transaction-filter">Search<input id="transaction-search" type="search" value="${esc(transactionSearch)}" placeholder="Description, category, or date"></label><label class="transaction-filter">Category<select id="transaction-category-filter"><option value="all">All categories</option>${b.categories.map((category) => `<option value="${esc(category.id)}" ${transactionCategoryFilter === category.id ? 'selected' : ''}>${esc(category.name)}</option>`).join('')}</select></label><div class="transaction-bulk"><span id="transaction-selection-count" aria-live="polite">0 selected</span><button class="button button-secondary" type="button" data-action="select-visible">Select visible</button><button class="button button-secondary" type="button" data-action="clear-selection" disabled>Clear selection</button><button class="button button-danger" type="button" data-action="delete-selected" disabled>Delete selected</button></div></div>${b.transactions.length ? `<div class="table-scroll"><table><thead><tr><th><span class="visually-hidden">Select</span></th><th>DATE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>AMOUNT</th><th></th></tr></thead><tbody>${transactionRows}</tbody></table></div><p id="transaction-no-results" class="transaction-no-results" hidden>No transactions match these filters.</p>` : '<div class="quiet-empty">No transactions recorded this month.</div>'}</section></section>`;
+}
+
+function applyTransactionFilters(): void {
+  const search = transactionSearch.trim().toLocaleLowerCase();
+  const rows = [...root.querySelectorAll<HTMLTableRowElement>('[data-transaction-row]')];
+  for (const row of rows) {
+    row.hidden = (transactionCategoryFilter !== 'all' && row.dataset.categoryId !== transactionCategoryFilter)
+      || (search !== '' && !String(row.dataset.search ?? '').includes(search));
+  }
+  const noResults = root.querySelector<HTMLElement>('#transaction-no-results');
+  if (noResults) noResults.hidden = rows.length === 0 || rows.some((row) => !row.hidden);
+  updateTransactionSelectionUI();
+}
+
+function updateTransactionSelectionUI(): void {
+  const selectedCount = current()?.transactions.filter((transaction) => selectedTransactionIds.has(transaction.id)).length ?? 0;
+  const count = root.querySelector<HTMLElement>('#transaction-selection-count');
+  const deleteButton = root.querySelector<HTMLButtonElement>('[data-action="delete-selected"]');
+  const clearButton = root.querySelector<HTMLButtonElement>('[data-action="clear-selection"]');
+  const selectVisibleButton = root.querySelector<HTMLButtonElement>('[data-action="select-visible"]');
+  const visibleCount = root.querySelectorAll('[data-transaction-row]:not([hidden])').length;
+  if (count) count.textContent = `${selectedCount} selected`;
+  if (deleteButton) deleteButton.disabled = selectedCount === 0;
+  if (clearButton) clearButton.disabled = selectedCount === 0;
+  if (selectVisibleButton) selectVisibleButton.disabled = visibleCount === 0;
 }
 function categoryCard(g: BudgetGroup, budget: Budget): string {
   const cats = budget.categories.filter((c) => c.type === g.id);
@@ -288,10 +548,10 @@ function categoryCard(g: BudgetGroup, budget: Budget): string {
   const symbols: Record<string, string> = { income: '↗', bills: '▤', expenses: '◉', subscriptions: '⟳', debts: '↘', savings: '⌑' };
   const symbol = symbols[g.id] || '◈';
   return `<section class="category-card"><header class="category-header"><span class="category-symbol ${g.color}">${symbol}</span><div class="category-heading"><h3>${g.name}</h3><span>${entries.length} ${entries.length === 1 ? 'item' : 'items'}</span></div><div class="category-total"><strong>${fmt(planned)}</strong><small>planned</small></div><button class="icon-button add-small" data-action="add-entry" data-type="${g.id}" data-category="${cats[0]?.id || ''}" aria-label="Add ${g.name} entry">+</button></header><div class="category-progress"><span class="${actual > planned && g.id !== 'income' ? 'over-budget' : ''}" style="width:${planned ? Math.min(100, actual / planned * 100) : (actual ? 100 : 0)}%"></span></div>
-    ${cats.length ? cats.map((c) => `<div class="sub-category"><div class="sub-category-title"><span>${esc(c.name)}</span><button class="text-action" data-action="add-entry" data-category="${esc(c.id)}">Add item</button></div>${c.entries.length ? c.entries.map((e) => { const actualForEntry = entryActual(budget, e); return `<button class="entry-row" data-action="edit-entry" data-category="${esc(c.id)}" data-entry="${esc(e.id)}"><span class="entry-name">${esc(e.name)}</span><span class="entry-planned">${fmt(e.planned)}</span><span class="entry-actual ${actualForEntry > +e.planned && g.id !== 'income' ? 'negative' : ''}">${fmt(actualForEntry)}</span></button>`; }).join('') : '<p class="category-empty">Nothing added yet</p>'}</div>`).join('') : `<div class="first-category"><span>No ${g.name.toLowerCase()} categories yet</span><button class="text-action" data-action="add-category" data-type="${g.id}">Create one</button></div>`}
+    ${cats.length ? cats.map((c) => `<div class="sub-category"><div class="sub-category-title"><span>${esc(c.name)}</span><span class="sub-category-actions"><button class="text-action" data-action="add-entry" data-category="${esc(c.id)}">Add item</button>${g.id === 'income' ? '' : `<button class="text-action" data-action="add-expense-schedule" data-category="${esc(c.id)}">Schedule item</button>`}</span></div>${c.entries.length ? c.entries.map((e) => { const actualForEntry = entryActual(budget, e); const incomeSchedule = budget.incomeSchedules.find((item) => item.id === e.scheduleId); const expenseSchedule = budget.expenseSchedules.find((item) => item.id === e.scheduleId); const scheduleLabel = incomeSchedule ? `${PAY_FREQUENCIES.find((item) => item.value === incomeSchedule.frequency)?.label ?? 'Recurring'} · ${displayDate(incomeSchedule.nextPayday)}` : expenseSchedule ? `${PAY_FREQUENCIES.find((item) => item.value === expenseSchedule.frequency)?.label ?? 'Recurring'} · ${displayDate(e.scheduledDate ?? expenseSchedule.nextDueDate)}` : ''; return `<button class="entry-row" data-action="edit-entry" data-category="${esc(c.id)}" data-entry="${esc(e.id)}"><span class="entry-name">${esc(e.name)}${scheduleLabel ? `<small class="entry-schedule">${esc(scheduleLabel)}</small>` : ''}</span><span class="entry-planned">${fmt(e.planned)}</span><span class="entry-actual ${actualForEntry > +e.planned && g.id !== 'income' ? 'negative' : ''}">${fmt(actualForEntry)}</span></button>`; }).join('') : '<p class="category-empty">Nothing added yet</p>'}</div>`).join('') : `<div class="first-category"><span>No ${g.name.toLowerCase()} categories yet</span><button class="text-action" data-action="add-category" data-type="${g.id}">Create one</button></div>`}
     <footer class="category-footer"><span>Actual ${fmt(actual)}</span><span class="${differenceClass}">${signed(actual - planned)} diff</span></footer></section>`;
 }
-function open(content: string): void { dialog.innerHTML = content; dialog.showModal(); }
+function open(content: string): void { dialog.innerHTML = content; if (!dialog.open) dialog.showModal(); }
 function newBudgetDialog(): void {
   open(`<form class="dialog-form" data-form="budget"><div class="dialog-topline"><span class="dialog-icon">◷</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">START A NEW BUDGET</p><h2>Name your budget</h2><label for="budget-name">Budget name</label><input id="budget-name" name="name" maxlength="80" placeholder="e.g. Household" required><fieldset class="group-picker"><legend>Choose what to include</legend><p>Income is included in every budget. Select the sections you want to set up.</p>${GROUPS.map((g) => `<label class="group-option"><input type="checkbox" name="groups" value="${g.id}" ${g.id === 'income' ? 'checked disabled' : 'checked'}><span class="type-dot ${g.color}"></span><span>${g.name}</span>${g.id === 'income' ? '<small>Required</small>' : ''}</label>`).join('')}</fieldset><div class="dialog-actions"><button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">Set up budget <span>→</span></button></div></form>`);
   requiredElement<HTMLInputElement>(dialog, '#budget-name').focus();
@@ -309,10 +569,10 @@ function wizardView(): void {
   if (!b) return;
   const steps = wizard.groups || GROUPS.map((group) => group.id);
   const g = GROUPS.find((group) => group.id === steps[wizard.step]);
-  if (!g) { state.active = b.id; state.view = 'budget'; clearWizard(); persist(); render(); dialog.close(); return; }
+  if (!g) { state.active = b.id; state.view = 'budget'; clearWizard(); persist(); render(); dialog.close(); setupCompleteDialog(); return; }
   const cats = b.categories.filter((c) => c.type === g.id);
   const count = b.categories.reduce((n, c) => n + c.entries.length, 0);
-  dialog.innerHTML = `<div class="wizard"><div class="wizard-head"><span class="dialog-icon">${wizard.step + 1}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">BUDGET SETUP · ${wizard.step + 1} OF 6</p><div class="wizard-progress">${GROUPS.map((_, i) => `<span class="${i <= wizard.step ? 'done' : ''}"></span>`).join('')}</div><h2>Add ${g.name.toLowerCase()}</h2><p class="dialog-copy">${({ income: 'Start with money coming in. Add each source and its monthly planned amount.', bills: 'Add regular bills like rent, utilities, and insurance.', expenses: 'Add flexible spending such as groceries and transport.', subscriptions: 'Keep recurring memberships and services together.', debts: 'Plan payments toward loans, cards, and balances.', savings: 'Set aside money for goals, reserves, and future plans.' })[g.id]}</p><div class="wizard-existing">${cats.flatMap((c) => c.entries.map((e) => `<div class="wizard-row"><span>${esc(e.name)}</span><strong>${fmt(e.planned)}</strong></div>`)).join('') || '<span class="wizard-empty">Add items now, or skip this step and return later.</span>'}</div><form class="wizard-add-form" data-form="wizard-entry"><label for="wizard-name">${g.id === 'income' ? 'Income source' : 'Item name'}</label><div class="wizard-fields"><input id="wizard-name" name="name" placeholder="${g.id === 'income' ? 'e.g. Paycheck' : 'e.g. Monthly amount'}" maxlength="80" required><label class="sr-only" for="wizard-amount">Planned amount</label><span class="currency-prefix">$</span><input id="wizard-amount" name="planned" type="number" min="0" step="0.01" placeholder="0.00" required></div><button class="button button-secondary wizard-add-button" type="submit">＋ Add ${g.id === 'income' ? 'income' : 'item'}</button></form><div class="dialog-actions wizard-actions"><button class="button button-secondary" data-action="wizard-back" type="button" ${wizard.step === 0 ? 'disabled' : ''}>Back</button><span class="wizard-count">${count} ${count === 1 ? 'item' : 'items'} added</span><button class="button button-primary" data-action="wizard-next" type="button">${wizard.step === 5 ? 'Finish setup' : 'Continue'} <span>→</span></button></div></div>`;
+  dialog.innerHTML = `<div class="wizard"><div class="wizard-head"><span class="dialog-icon">${wizard.step + 1}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">BUDGET SETUP · ${wizard.step + 1} OF 6</p><div class="wizard-progress">${GROUPS.map((_, i) => `<span class="${i <= wizard.step ? 'done' : ''}"></span>`).join('')}</div><h2>Add ${g.name.toLowerCase()}</h2><p class="dialog-copy">${({ income: 'Start with money coming in. Add each source and its monthly planned amount.', bills: 'Add regular bills like rent, utilities, and insurance.', expenses: 'Add flexible spending such as groceries and transport.', subscriptions: 'Keep recurring memberships and services together.', debts: 'Plan payments toward loans, cards, and balances.', savings: 'Set aside money for goals, reserves, and future plans.' })[g.id]}</p><div class="wizard-existing">${cats.flatMap((c) => c.entries.map((e) => `<div class="wizard-row"><span>${esc(e.name)}</span><strong>${fmt(e.planned)}</strong></div>`)).join('') || '<span class="wizard-empty">Add items now, or skip this step and return later.</span>'}</div><form class="wizard-add-form" data-form="wizard-entry"><label for="wizard-name">${g.id === 'income' ? 'Income source' : 'Item name'}</label><div class="wizard-fields"><input id="wizard-name" name="name" placeholder="${g.id === 'income' ? 'e.g. Paycheck' : 'e.g. Monthly amount'}" maxlength="80" required><label class="sr-only" for="wizard-amount">Planned amount</label><span class="currency-prefix">$</span><input id="wizard-amount" name="planned" type="number" min="0" step="0.01" placeholder="0.00" required>${g.id === 'income' ? '<label for="wizard-pay-frequency">Pay frequency</label><select id="wizard-pay-frequency" name="frequency">' + PAY_FREQUENCIES.map((option) => `<option value="${option.value}" ${option.value === 'biweekly' ? 'selected' : ''}>${option.label}</option>`).join('') + '</select><label for="wizard-next-payday">Next payday</label><input id="wizard-next-payday" name="nextPayday" type="date">' : ''}</div><button class="button button-secondary wizard-add-button" type="submit">＋ Add ${g.id === 'income' ? 'income' : 'item'}</button></form><div class="dialog-actions wizard-actions"><button class="button button-secondary" data-action="wizard-back" type="button" ${wizard.step === 0 ? 'disabled' : ''}>Back</button><span class="wizard-count">${count} ${count === 1 ? 'item' : 'items'} added</span><button class="button button-primary" data-action="wizard-next" type="button">${wizard.step === 5 ? 'Finish setup' : 'Continue'} <span>→</span></button></div></div>`;
   const progress = requiredElement<HTMLElement>(dialog, '.wizard-progress');
   progress.replaceChildren(...steps.map((_, index) => {
     const segment = document.createElement('span');
@@ -366,17 +626,132 @@ function newMonthDialog(): void {
   const month = monthAfter(source.month);
   open(`<form class="dialog-form" data-form="month" data-source="${esc(source.id)}"><div class="dialog-topline"><span class="dialog-icon">◷</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">CONTINUE ${esc(source.name.toUpperCase())}</p><h2>Create a new month</h2><p class="dialog-copy">Your planned categories and amounts will copy from ${esc(monthText(source.month))}. Actuals start at zero, and the actual leftover carries forward.</p><label for="new-month">Month</label><input id="new-month" name="month" type="month" value="${month}" required><p class="carryover-preview">Opening carryover <strong>${fmt(carryover)}</strong></p><p class="form-error" id="month-error" aria-live="polite"></p><div class="dialog-actions"><button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">Create month <span>→</span></button></div></form>`);
 }
+function expenseScheduleDialog(categoryId: string, schedule?: RecurringExpenseSchedule): void {
+  const budget = current();
+  if (!budget) return;
+  const category = budget.categories.find((item) => item.id === (schedule?.categoryId ?? categoryId));
+  const categories = budget.categories.filter((item) => item.type !== 'income');
+  if (!category || categories.length === 0) return;
+  const today = new Date();
+  const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const editing = schedule !== undefined;
+  open(`<form class="dialog-form" data-form="expense-schedule" data-schedule="${esc(schedule?.id ?? '')}"><div class="dialog-topline"><span class="dialog-icon">◷</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">${editing ? 'UPDATE RECURRING EXPENSE' : 'REPEAT A PLANNED EXPENSE'}</p><h2>${editing ? 'Manage schedule' : 'Schedule recurring item'}</h2><p class="dialog-copy">A planned item is added to each eligible month. Actual spending is recorded separately.</p><label for="expense-schedule-name">Item name</label><input id="expense-schedule-name" name="name" maxlength="80" value="${esc(schedule?.name ?? '')}" placeholder="e.g. Rent" required><label for="expense-schedule-amount">Planned amount</label><div class="input-money"><span>$</span><input id="expense-schedule-amount" name="amount" type="number" min="0.01" step="0.01" value="${schedule ? esc(schedule.amount) : ''}" placeholder="0.00" required></div><label for="expense-schedule-category">Category</label><select id="expense-schedule-category" name="categoryId" required>${categories.map((item) => `<option value="${esc(item.id)}" ${item.id === category.id ? 'selected' : ''}>${esc(item.name)} · ${esc(group(item.type).name)}</option>`).join('')}</select><label for="expense-schedule-frequency">Frequency</label><select id="expense-schedule-frequency" name="frequency">${PAY_FREQUENCIES.map((option) => `<option value="${option.value}" ${option.value === (schedule?.frequency ?? 'monthly') ? 'selected' : ''}>${option.label}</option>`).join('')}</select><label for="expense-schedule-date">Next due date</label><input id="expense-schedule-date" name="nextDueDate" type="date" value="${esc(schedule?.nextDueDate ?? todayString)}" required><div class="dialog-actions">${editing ? `<button class="button button-danger" data-action="remove-expense-schedule" data-schedule="${esc(schedule.id)}" type="button">Remove</button><button class="button button-secondary" data-action="toggle-expense-schedule" data-schedule="${esc(schedule.id)}" type="button">${schedule.paused ? 'Resume' : 'Pause'}</button>` : ''}<button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">${editing ? 'Save changes' : 'Create schedule'}</button></div></form>`);
+  requiredElement<HTMLInputElement>(dialog, '#expense-schedule-name').focus();
+}
+function manageExpenseSchedulesDialog(categoryId?: string): void {
+  const budget = current();
+  const schedules = budget?.expenseSchedules.filter((schedule) => !categoryId || schedule.categoryId === categoryId) ?? [];
+  if (!budget || schedules.length === 0) return;
+  open(`<section class="dialog-form"><div class="dialog-topline"><span class="dialog-icon">◷</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">BUDGET SETUP</p><h2>Recurring schedules</h2><p class="dialog-copy">Edit a schedule to update future planned items, or pause or remove it.</p><div class="expense-schedule-list">${schedules.map((schedule) => { const category = budget.categories.find((item) => item.id === schedule.categoryId); return `<div class="expense-schedule-row"><div><strong>${esc(schedule.name)}</strong><small>${esc(category?.name ?? 'Category')} · ${PAY_FREQUENCIES.find((item) => item.value === schedule.frequency)?.label ?? 'Recurring'} · ${schedule.paused ? 'Paused' : `Next due ${esc(displayDate(schedule.nextDueDate))}`}</small></div><button class="button button-secondary" data-action="edit-expense-schedule" data-schedule="${esc(schedule.id)}" type="button">Manage</button></div>`; }).join('')}</div><div class="dialog-actions"><button class="button button-secondary" data-action="close" type="button">Done</button></div></section>`);
+}
+function expenseEntryHasActivity(budget: Budget, entry: BudgetEntry): boolean {
+  return entry.actual !== 0 || budget.transactions.some((transaction) => transaction.entryId === entry.id);
+}
+function synchronizeExpenseEntries(budget: Budget, schedule: RecurringExpenseSchedule): void {
+  const destination = budget.categories.find((category) => category.id === schedule.categoryId);
+  if (!destination) return;
+  const today = new Date();
+  const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const occurrences = schedule.paused ? [] : buildExpenseEntriesForMonth(schedule, budget.month).filter((entry) => entry.date >= todayString);
+  const remainingOccurrences = new Map(occurrences.map((occurrence) => [occurrence.date, occurrence]));
+  const scheduledEntries = budget.categories.flatMap((category) => category.entries
+    .filter((entry) => entry.scheduleId === schedule.id)
+    .map((entry) => ({ category, entry })));
+  for (const { category, entry } of scheduledEntries) {
+    const index = category.entries.indexOf(entry);
+    if (index === -1 || !entry.scheduledDate || entry.scheduledDate < todayString) continue;
+    const occurrence = remainingOccurrences.get(entry.scheduledDate);
+    if (!occurrence) {
+      if (expenseEntryHasActivity(budget, entry)) {
+        if (!schedule.paused) {
+          entry.scheduleId = null;
+          delete entry.scheduledDate;
+        } else if (category.id !== destination.id) {
+          category.entries.splice(index, 1);
+          destination.entries.push(entry);
+          budget.transactions.forEach((transaction) => { if (transaction.entryId === entry.id) transaction.categoryId = destination.id; });
+        }
+      } else {
+        category.entries.splice(index, 1);
+      }
+      continue;
+    }
+    remainingOccurrences.delete(entry.scheduledDate);
+    if (category.id !== destination.id) {
+      category.entries.splice(index, 1);
+      destination.entries.push(entry);
+      budget.transactions.forEach((transaction) => { if (transaction.entryId === entry.id) transaction.categoryId = destination.id; });
+    }
+    entry.name = occurrence.name;
+    entry.planned = occurrence.amount;
+  }
+  for (const occurrence of remainingOccurrences.values()) {
+    destination.entries.push({ id: uid(), name: occurrence.name, planned: occurrence.amount, actual: 0, scheduleId: schedule.id, scheduledDate: occurrence.date });
+  }
+}
+function addExpenseSchedule(schedule: RecurringExpenseSchedule, sourceBudget: Budget): void {
+  const sourceCategory = sourceBudget.categories.find((category) => category.id === schedule.categoryId);
+  if (!sourceCategory) return;
+  const futureBudgets = seriesBudgets(sourceBudget.seriesId).filter((budget) => budget.month >= sourceBudget.month);
+  for (const budget of futureBudgets) {
+    let category = budget.id === sourceBudget.id
+      ? budget.categories.find((item) => item.id === sourceCategory.id)
+      : budget.categories.find((item) => item.type === sourceCategory.type && item.name === sourceCategory.name);
+    if (!category) {
+      category = { ...sourceCategory, id: uid(), entries: [] };
+      budget.categories.push(category);
+      if (!budget.selectedTypes.includes(category.type)) budget.selectedTypes.push(category.type);
+    }
+    const monthSchedule = { ...schedule, categoryId: category.id };
+    budget.expenseSchedules = [...(budget.expenseSchedules || []).filter((item) => item.id !== schedule.id), monthSchedule];
+    synchronizeExpenseEntries(budget, monthSchedule);
+  }
+}
+function removeExpenseSchedule(scheduleId: string, sourceBudget: Budget): void {
+  const today = new Date();
+  const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  for (const budget of seriesBudgets(sourceBudget.seriesId)) {
+    for (const category of budget.categories) {
+      for (let index = category.entries.length - 1; index >= 0; index--) {
+        const entry = category.entries[index];
+        if (entry.scheduleId !== scheduleId) continue;
+        if (entry.scheduledDate && entry.scheduledDate >= todayString && !expenseEntryHasActivity(budget, entry)) {
+          category.entries.splice(index, 1);
+        } else {
+          entry.scheduleId = null;
+          delete entry.scheduledDate;
+        }
+      }
+    }
+    budget.expenseSchedules = budget.expenseSchedules.filter((schedule) => schedule.id !== scheduleId);
+  }
+}
 function transactionItemOptions(categoryId: string, selectedEntryId: string | null = null): string {
   const category = current()?.categories.find((item) => item.id === categoryId);
   return `<option value="" ${selectedEntryId ? '' : 'selected'}>Category only</option>${category?.entries.map((entry) => `<option value="${esc(entry.id)}" ${entry.id === selectedEntryId ? 'selected' : ''}>${esc(entry.name)}</option>`).join('') ?? ''}`;
 }
-function transactionDialog(transaction: BudgetTransaction | null = null): void {
+function transactionDialog(transaction: BudgetTransaction | null = null, duplicate = false): void {
   const budget = current();
   if (!budget || budget.categories.length === 0) return;
   const selectedCategoryId = transaction?.categoryId ?? budget.categories[0].id;
   const today = new Date();
   const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   open(`<form class="dialog-form" data-form="transaction" data-transaction="${esc(transaction?.id ?? '')}"><div class="dialog-topline"><span class="dialog-icon">${transaction ? '↗' : '＋'}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">${transaction ? 'UPDATE RECORDED ACTIVITY' : 'RECORD ACTUAL ACTIVITY'}</p><h2>${transaction ? 'Edit transaction' : 'Add transaction'}</h2><label for="transaction-date">Date</label><input id="transaction-date" name="date" type="date" value="${esc(transaction?.date ?? todayString)}" required><label for="transaction-description">Description</label><input id="transaction-description" name="description" maxlength="100" value="${esc(transaction?.description ?? '')}" placeholder="e.g. Grocery store" required><label for="transaction-amount">Amount</label><div class="input-money"><span>$</span><input id="transaction-amount" name="amount" type="number" min="0.01" step="0.01" value="${transaction ? esc(transaction.amount) : ''}" placeholder="0.00" required></div><label for="transaction-category">Budget category</label><select id="transaction-category" name="categoryId" required>${budget.categories.map((category) => `<option value="${esc(category.id)}" ${category.id === selectedCategoryId ? 'selected' : ''}>${esc(category.name)} · ${esc(group(category.type).name)}</option>`).join('')}</select><label for="transaction-entry">Budget item <span>(optional)</span></label><select id="transaction-entry" name="entryId">${transactionItemOptions(selectedCategoryId, transaction?.entryId ?? null)}</select><div class="dialog-actions">${transaction ? '<button class="button button-danger" data-action="delete-transaction" data-transaction="' + esc(transaction.id) + '" type="button">Delete</button>' : '<span></span>'}<button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">${transaction ? 'Save changes' : 'Add transaction'}</button></div></form>`);
+  if (transaction && duplicate) {
+    requiredElement<HTMLFormElement>(dialog, 'form').dataset.transaction = '';
+    requiredElement<HTMLElement>(dialog, '.panel-kicker').textContent = 'CREATE A COPY OF RECORDED ACTIVITY';
+    requiredElement<HTMLHeadingElement>(dialog, 'h2').textContent = 'Duplicate transaction';
+    requiredElement<HTMLButtonElement>(dialog, '[data-action="delete-transaction"]').remove();
+    requiredElement<HTMLButtonElement>(dialog, '.button-primary').textContent = 'Add duplicate';
+  } else if (transaction) {
+    const duplicateButton = document.createElement('button');
+    duplicateButton.type = 'button';
+    duplicateButton.className = 'text-action transaction-duplicate';
+    duplicateButton.dataset.action = 'duplicate-transaction';
+    duplicateButton.dataset.transaction = transaction.id;
+    duplicateButton.textContent = 'Duplicate';
+    requiredElement<HTMLElement>(dialog, '.dialog-topline').insertBefore(duplicateButton, requiredElement(dialog, '.dialog-close'));
+  }
   requiredElement<HTMLInputElement>(dialog, '#transaction-description').focus();
 }
 function categoryDialog(type: string = 'expenses'): void {
@@ -396,12 +771,52 @@ function entryDialog(categoryId: string = '', type: string = 'expenses', entry: 
 
 document.addEventListener('click', (event: MouseEvent) => {
   if (!(event.target instanceof Element)) return;
+  const openBudgetMenu = root.querySelector<HTMLDetailsElement>('.budget-menu[open]');
+  if (openBudgetMenu && !openBudgetMenu.contains(event.target)) openBudgetMenu.open = false;
   const button = event.target.closest<HTMLButtonElement>('[data-action]'); if (!button) return;
-  const { action, id, category, type, entry, transaction } = button.dataset;
+  const { action, id, category, type, entry, transaction, schedule } = button.dataset;
   if (action === 'retry-load') { void initialize(); return; }
+  if (action === 'guided-tour') { showGuidedTour(); return; }
+  if (action === 'setup-finish') { dialog.close(); return; }
+  if (action === 'tour-finish') { finishGuidedTour(); return; }
+  if (action === 'tour-previous') { showGuidedTour(guidedTourStep - 1); return; }
+  if (action === 'tour-next') {
+    if (guidedTourStep === GUIDED_TOUR_STEPS.length - 1) finishGuidedTour();
+    else showGuidedTour(guidedTourStep + 1);
+    return;
+  }
+  if (action === 'export-backup') exportBackup();
+  if (action === 'import-backup') requiredElement<HTMLInputElement>(root, '#backup-file').click();
   if (action === 'budget-view' && (button.dataset.view === 'overview' || button.dataset.view === 'transactions')) { dashboardTab = button.dataset.view; render(); }
   if (action === 'new-budget') newBudgetDialog();
   if (action === 'new-month') newMonthDialog();
+  if (action === 'select-visible') {
+    for (const row of root.querySelectorAll<HTMLTableRowElement>('[data-transaction-row]:not([hidden])')) {
+      const id = row.dataset.transactionId;
+      if (id) selectedTransactionIds.add(id);
+      const checkbox = row.querySelector<HTMLInputElement>('.transaction-select');
+      if (checkbox) checkbox.checked = true;
+    }
+    updateTransactionSelectionUI();
+  }
+  if (action === 'clear-selection') {
+    selectedTransactionIds.clear();
+    root.querySelectorAll<HTMLInputElement>('.transaction-select').forEach((checkbox) => { checkbox.checked = false; });
+    updateTransactionSelectionUI();
+  }
+  if (action === 'delete-selected') {
+    const budget = current();
+    const selected = budget?.transactions.filter((item) => selectedTransactionIds.has(item.id)) ?? [];
+    if (budget && selected.length && window.confirm(`Delete ${selected.length} selected ${selected.length === 1 ? 'transaction' : 'transactions'}? This cannot be undone.`)) {
+      budget.transactions = budget.transactions.filter((item) => !selectedTransactionIds.has(item.id));
+      selectedTransactionIds.clear();
+      persist(); render();
+    }
+  }
+  if (action === 'set-default-budget' && id) {
+    state.preferences = setDefaultBudgetId(state.preferences, id);
+    persist(); render();
+  }
   if (action === 'delete-month') deleteCurrentMonth();
   if (action === 'delete-budget') deleteCurrentBudget();
   if (action === 'new-transaction') transactionDialog();
@@ -409,12 +824,39 @@ document.addEventListener('click', (event: MouseEvent) => {
     const found = current()?.transactions.find((item) => item.id === transaction);
     if (found) transactionDialog(found);
   }
+  if (action === 'duplicate-transaction' && transaction) {
+    const found = current()?.transactions.find((item) => item.id === transaction);
+    if (found) transactionDialog(found, true);
+  }
   if (action === 'home') { state.view = 'home'; render(); }
   if (action === 'select-series' && id) { state.active = latestInSeries(id)?.id ?? null; state.view = 'budget'; persist(); render(); }
   if ((action === 'select-month' || action === 'select') && id) { state.active = id; state.view = 'budget'; persist(); render(); }
   if (action === 'budget-view' && (button.dataset.view === 'overview' || button.dataset.view === 'transactions')) { dashboardTab = button.dataset.view; render(); }
   if (action === 'add-category') categoryDialog(type || 'expenses');
   if (action === 'add-entry') entryDialog(category || '', type || 'expenses');
+  if (action === 'add-expense-schedule' && category) expenseScheduleDialog(category);
+  if (action === 'manage-expense-schedules') manageExpenseSchedulesDialog(category);
+  if (action === 'edit-expense-schedule' && schedule) {
+    const budget = current();
+    const found = budget?.expenseSchedules.find((item) => item.id === schedule);
+    if (found) expenseScheduleDialog(found.categoryId, found);
+  }
+  if (action === 'toggle-expense-schedule' && schedule) {
+    const budget = current();
+    const found = budget?.expenseSchedules.find((item) => item.id === schedule);
+    if (budget && found) {
+      addExpenseSchedule({ ...found, paused: !found.paused }, budget);
+      persist(); dialog.close(); render();
+    }
+  }
+  if (action === 'remove-expense-schedule' && schedule) {
+    const budget = current();
+    const found = budget?.expenseSchedules.find((item) => item.id === schedule);
+    if (budget && found && window.confirm(`Remove the recurring schedule for "${found.name}"? Future planned occurrences without actual activity will be removed.`)) {
+      removeExpenseSchedule(schedule, budget);
+      persist(); dialog.close(); render();
+    }
+  }
   if (action === 'edit-entry' && category) { const found = current()?.categories.find((c) => c.id === category)?.entries.find((e) => e.id === entry); if (found) entryDialog(category, 'expenses', found); }
   if (action === 'close') dialog.close();
   if (action === 'wizard-back' && wizard && wizard.step > 0) { wizard.step--; wizardView(); }
@@ -432,6 +874,42 @@ document.addEventListener('click', (event: MouseEvent) => {
     if (budget) budget.transactions = budget.transactions.filter((item) => item.id !== transaction);
     persist(); dialog.close(); render();
   }
+});
+document.addEventListener('keydown', (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && guidedTourLayer) {
+    event.preventDefault();
+    finishGuidedTour();
+  }
+});
+document.addEventListener('input', (event: Event) => {
+  if (!(event.target instanceof HTMLInputElement) || event.target.id !== 'transaction-search') return;
+  transactionSearch = event.target.value;
+  selectedTransactionIds.clear();
+  root.querySelectorAll<HTMLInputElement>('.transaction-select').forEach((checkbox) => { checkbox.checked = false; });
+  applyTransactionFilters();
+});
+document.addEventListener('change', (event: Event) => {
+  const target = event.target;
+  if (target instanceof HTMLSelectElement && target.id === 'transaction-category-filter') {
+    transactionCategoryFilter = target.value;
+    selectedTransactionIds.clear();
+    root.querySelectorAll<HTMLInputElement>('.transaction-select').forEach((checkbox) => { checkbox.checked = false; });
+    applyTransactionFilters();
+  }
+});
+document.addEventListener('change', (event: Event) => {
+  if (!(event.target instanceof HTMLInputElement)) return;
+  if (event.target.classList.contains('transaction-select')) {
+    const id = event.target.dataset.transactionCheck;
+    if (id && event.target.checked) selectedTransactionIds.add(id);
+    else if (id) selectedTransactionIds.delete(id);
+    updateTransactionSelectionUI();
+    return;
+  }
+  if (event.target.id !== 'backup-file') return;
+  const [file] = event.target.files ?? [];
+  if (file) void importBackup(file);
+  event.target.value = '';
 });
 dialog.addEventListener('change', (event: Event) => {
   const target = event.target;
@@ -453,7 +931,7 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
   if (form.dataset.form === 'budget') {
     const selectedTypes: BudgetGroupId[] = ['income', ...Array.from(form.querySelectorAll<HTMLInputElement>('input[name="groups"]:checked'), (input) => input.value as BudgetGroupId).filter((type) => type !== 'income')];
     const now = new Date(), month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const b = { id: uid(), seriesId: uid(), name: String(data.get('name')).trim(), month, carryover: 0, selectedTypes, categories: defaultCategories(selectedTypes), transactions: [] };
+    const b = { id: uid(), seriesId: uid(), name: String(data.get('name')).trim(), month, carryover: 0, selectedTypes, categories: defaultCategories(selectedTypes), transactions: [], incomeSchedules: [], expenseSchedules: [] };
     state.budgets.push(b); state.active = b.id; state.view = 'budget'; dashboardTab = 'overview'; wizard = { budgetId: b.id, groups: selectedTypes, step: 0 }; persist(); wizardView();
   } else if (form.dataset.form === 'month') {
     const source = state.budgets.find((item) => item.id === form.dataset.source);
@@ -465,18 +943,74 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
     }
     const latest = latestInSeries(source.seriesId);
     const template = latest || source;
+    const clonedCategories = template.categories.map((category) => ({
+      ...category,
+      id: uid(),
+      entries: category.entries.map((entry) => ({ ...entry, id: uid(), actual: 0 })),
+    }));
+    const categoryIdMap = new Map(template.categories.map((category, index) => [category.id, clonedCategories[index].id]));
+    const expenseScheduleIds = new Set((template.expenseSchedules || []).map((schedule) => schedule.id));
+    clonedCategories.forEach((category) => { category.entries = category.entries.filter((entry) => !entry.scheduleId || !expenseScheduleIds.has(entry.scheduleId)); });
+    const expenseSchedules = (template.expenseSchedules || []).flatMap((schedule) => {
+      const categoryId = categoryIdMap.get(schedule.categoryId);
+      return categoryId ? [{ ...schedule, categoryId }] : [];
+    });
+    for (const schedule of expenseSchedules) {
+      const category = clonedCategories.find((item) => item.id === schedule.categoryId);
+      if (!category) continue;
+      category.entries.push(...buildExpenseEntriesForMonth(schedule, month).map((entry: { name: string; amount: number; date: string }) => ({
+        id: uid(),
+        name: entry.name,
+        planned: entry.amount,
+        actual: 0,
+        scheduleId: schedule.id,
+        scheduledDate: entry.date,
+      })));
+    }
+    const incomeCategory = clonedCategories.find((category) => category.type === 'income');
+    if (incomeCategory) {
+      incomeCategory.entries = incomeCategory.entries.filter((entry) => !entry.scheduleId);
+      const scheduledEntries = (template.incomeSchedules || []).flatMap((schedule) => buildIncomeEntriesForMonth(schedule, month).map((entry: { name: string; amount: number }) => ({
+        id: uid(),
+        name: entry.name,
+        planned: entry.amount,
+        actual: 0,
+        scheduleId: schedule.id,
+      })));
+      incomeCategory.entries.push(...scheduledEntries);
+    }
     const b = {
       id: uid(), seriesId: template.seriesId, name: template.name, month,
       carryover: totals(template).actualLeft,
       selectedTypes: [...(template.selectedTypes || GROUPS.map((g) => g.id))],
       transactions: [],
-      categories: template.categories.map((category) => ({
-        ...category,
-        id: uid(),
-        entries: category.entries.map((entry) => ({ ...entry, id: uid(), actual: 0 })),
-      })),
+      categories: clonedCategories,
+      incomeSchedules: [...(template.incomeSchedules || [])],
+      expenseSchedules,
     };
     state.budgets.push(b); state.active = b.id; state.view = 'budget'; persist(); dialog.close(); render();
+  } else if (form.dataset.form === 'expense-schedule') {
+    const budget = current();
+    const categoryId = String(data.get('categoryId') ?? '');
+    const category = budget?.categories.find((item) => item.id === categoryId);
+    if (!budget || !category || category.type === 'income') return;
+    const name = String(data.get('name') ?? '').trim();
+    const amount = Number(data.get('amount'));
+    const frequency = String(data.get('frequency') || 'monthly') as PayFrequency;
+    const nextDueDate = String(data.get('nextDueDate') ?? '');
+    if (!name || amount <= 0 || !nextDueDate || !PAY_FREQUENCIES.some((option) => option.value === frequency)) return;
+    const existing = budget.expenseSchedules.find((schedule) => schedule.id === form.dataset.schedule);
+    addExpenseSchedule({
+      id: existing?.id ?? uid(),
+      categoryId: category.id,
+      name,
+      amount,
+      frequency,
+      intervalDays: payFrequencyInterval(frequency),
+      nextDueDate,
+      paused: existing?.paused ?? false,
+    }, budget);
+    persist(); dialog.close(); render();
   } else if (form.dataset.form === 'transaction') {
     const budget = current();
     if (!budget) return;
@@ -500,7 +1034,18 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
     const g = GROUPS.find((item) => item.id === groupId);
     if (!b || !g) return;
     let c = b.categories.find((item) => item.type === g.id); if (!c) { c = { id: uid(), type: g.id, name: g.name, entries: [] }; b.categories.push(c); }
-    c.entries.push({ id: uid(), name: String(data.get('name') ?? '').trim(), planned: Number(data.get('planned')) || 0, actual: 0 }); persist(); wizardView();
+    const name = String(data.get('name') ?? '').trim();
+    const planned = Number(data.get('planned')) || 0;
+    const nextPayday = String(data.get('nextPayday') ?? '').trim();
+    if (g.id === 'income' && nextPayday) {
+      const frequency = (String(data.get('frequency') || 'biweekly') as PayFrequency);
+      const schedule: RecurringIncomeSchedule = { id: uid(), name, amount: planned, frequency, intervalDays: payFrequencyInterval(frequency), nextPayday };
+      b.incomeSchedules.push(schedule);
+      c.entries.push({ id: uid(), name, planned, actual: 0, scheduleId: schedule.id });
+    } else {
+      c.entries.push({ id: uid(), name, planned, actual: 0 });
+    }
+    persist(); wizardView();
   } else if (form.dataset.form === 'category') {
     const b = current(); if (!b) return;
     const customName = String(data.get('customType') || '').trim();

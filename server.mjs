@@ -59,7 +59,10 @@ async function handleApi(request, response, pathname, storage) {
       sendJson(response, 400, { error: 'Invalid budget state.' });
       return;
     }
-    storage.writeState(JSON.stringify({ budgets: payload.budgets, active: payload.active }));
+    const preferences = payload.preferences && typeof payload.preferences === 'object'
+      ? { defaultBudgetId: payload.preferences.defaultBudgetId === null || typeof payload.preferences.defaultBudgetId === 'string' ? payload.preferences.defaultBudgetId : null }
+      : { defaultBudgetId: null };
+    storage.writeState(JSON.stringify({ budgets: payload.budgets, active: payload.active, preferences }));
     sendJson(response, 200, { saved: true });
     return;
   }

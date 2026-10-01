@@ -19,22 +19,36 @@ Kestral Budget is a local-first monthly budgeting app. Create named budgets, pla
 
 Choose **New budget**, enter a name, and select the standard sections to include. Income is always included; Bills, Expenses, Subscriptions, Debts, and Savings are optional. The setup wizard visits each selected section in order and lets you add budget items with planned amounts. You can skip a section's items and add them later.
 
-Custom categories and custom spending types can be added from the Overview after setup.
+For recurring income, choose a weekly, biweekly, or monthly frequency and enter the next payday. The app generates a planned income item for each scheduled payday in each month. One-off or irregular income can still be entered manually.
+
+Custom categories and custom spending types can be added from the Overview after setup. When setup finishes, you can start an optional guided tour; use the graduation-cap **App tour** button in the top bar to replay it later. The tour highlights the main sections and explains how to update the plan.
+
+Use the budget actions menu to set a budget as the default. Its star appears beside the budget name in the sidebar.
 
 ### Use Overview and Transactions
 
 The selected month has two views:
 
 - **Overview** shows income, allocated amounts, planned and actual leftover, planned-versus-actual differences, the top 20 actual spending items, and budget categories.
-- **Transactions** shows that month's dated transaction ledger. Use **Add transaction** to enter a date, description, amount, and category. You can optionally assign it to a budget item in that category. Transactions can be edited or deleted.
+- **Transactions** shows that month's dated transaction ledger. Use **Add transaction** to enter a date, description, amount, and category. You can optionally assign it to a budget item in that category. Search by description, category, or date, filter by category, and select visible transactions for bulk deletion. Transactions can be edited, duplicated, or deleted individually.
 
 The category determines how a transaction is counted: transactions under Income add to actual income; transactions under other categories add to actual spending. A transaction linked to a budget item also appears in that item's actual amount. Category-only transactions still affect category totals and leftover, but are not assigned to a specific item.
+
+When **Planned Left Over** is positive, a quiet note suggests assigning the remainder for users who prefer a zero-based budget. It is informational and does not block other workflows.
 
 ### Create a new month
 
 Choose **New month** from the selected budget. The new month copies the latest month's categories and planned budget items, resets copied item actuals, starts with an empty transaction ledger, and carries forward the prior month's actual leftover. Transactions remain with the month in which they were recorded.
 
+Use **Schedule item** in a non-income category to repeat a planned expense weekly, biweekly, or monthly. Each occurrence is added as a planned item with its due date; actual spending is recorded separately. Adding a schedule also fills matching future months already in the budget series.
+
+Use **Manage recurring** above the categories to edit a schedule, change its category, pause or resume it, or remove it. Changes update future planned entries in existing months. Historical entries and entries with actual amounts or linked transactions are retained when a schedule is paused or removed.
+
 If a month is deleted, carryovers for remaining months in that budget are recalculated in month order. **Delete entire budget** removes all months and transactions in that named budget.
+
+### Back up and restore data
+
+Use the download and upload controls in the sidebar to export a JSON backup or restore one. A backup includes all budgets, the active budget, and saved preferences. Importing replaces the current data after confirmation; keep a copy of the backup somewhere safe.
 
 ## Calculations
 
@@ -126,7 +140,18 @@ The Windows installer is written to `release/windows/`. On macOS, run `npm run d
 
 The `Desktop Builds` GitHub Actions workflow builds both installers on every push and uploads separate Windows and Mac artifacts. Pushing a `v*` tag also publishes a GitHub Release with the `.exe` and `.dmg`. The Mac build is unsigned; sign and notarize it with Apple Developer credentials before distributing it broadly.
 
-The desktop and container editions currently use separate databases. Importing/exporting data between them is not implemented yet. Windows installers are unsigned unless a code-signing certificate is configured, so Windows may show a publisher warning.
+The desktop and container editions use separate databases. Export a backup from one edition and import it into the other to transfer data. Windows installers are unsigned unless a code-signing certificate is configured, so Windows may show a publisher warning.
+
+### Run with Docker Compose
+
+Copy the sample environment file and start the app with one command:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+The compose setup exposes the app on `http://localhost:8080` by default and stores saved budgets in a persistent Docker volume named `kestralbudget-data`.
 
 ### Run with Podman
 
@@ -144,15 +169,22 @@ Keep using the same `kestralbudget-data` volume when replacing the container. Re
 
 The container edition stores budgets in `/data/kestralbudget.sqlite`; mount a persistent Podman volume there to retain data across container replacement. The desktop edition stores its SQLite database under Electron's per-user `userData` directory using the WebAssembly SQLite adapter. Each edition has its own database. The container app imports existing `localStorage` budgets once when its server database is first initialized; after that, the server database is authoritative. Neither edition has accounts, cloud sync, or automatic backups. Do not expose the container API to an untrusted network, and keep independent backups of important data.
 
-The app restores the previously selected budget when available. A separate user-configurable default-budget preference, data export/import, and automatic recurring-paycheck scheduling are not currently implemented.
+The app restores the previously selected budget when available and supports a user-configurable default budget. Backups are manual; store exported files securely and keep independent copies of important data.
 
 ## Project structure
 
 ```text
 index.html                 App entry point
 src/budget.ts              Budget model, calculations, and interactions
+src/backup.js              Versioned JSON export/import validation
 src/budget.css             Main interface and responsive styles
 src/budget-workflow.css    Dialog, setup, and action-menu styles
+src/guided-tour.css         Guided tour overlay and top-bar control
+src/paycheck-scheduler.js   Recurring income and expense date generation
+src/preferences.js          Default-budget preference helpers
+src/transactions.css        Transaction search, filters, and bulk actions
+src/recurring-expenses.css  Recurring expense category controls
+src/budget-feedback.css    Subtle planned-leftover feedback
 tsconfig.json              Strict TypeScript configuration
 package.json               Scripts and development dependencies
 server.mjs                 Static file server and SQLite API
