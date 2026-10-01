@@ -1,5 +1,8 @@
 # Kestral Budget
 
+![GitHub release](https://img.shields.io/github/v/release/Brandon/kestralbudget?display_name=tag)
+![Desktop builds](https://img.shields.io/github/actions/workflow/status/Brandon/kestralbudget/desktop-builds.yml?branch=main&label=desktop%20builds)
+
 Kestral Budget is a local-first monthly budgeting app. Create named budgets, plan income and spending, record transactions, and carry actual leftover money into later months.
 
 ## How the app is organized
@@ -79,6 +82,37 @@ npm run build
 
 The production container builds the frontend and runs it with the API server.
 
+### Release checklist
+
+Use this checklist before publishing a new desktop release:
+
+1. Update the app version in `package.json` to the next release version.
+2. Verify the app builds locally on your target platform.
+3. Build the Windows installer on Windows x64:
+
+```powershell
+npm ci
+npm run desktop:dist
+```
+
+4. Build the macOS disk image on macOS:
+
+```bash
+npm ci
+npm run desktop:dist:mac
+```
+
+5. Commit the release changes and push them to `main`.
+6. Create and push a version tag:
+
+```powershell
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+7. Watch the `Desktop Builds` workflow. The Windows and macOS jobs should complete successfully, then the tag-gated release job uploads the `.exe` and `.dmg` to the GitHub Release.
+8. Verify the release page contains both installer artifacts before sharing the link.
+
 ### Build the Windows desktop installer
 
 On Windows x64, install dependencies and build the NSIS installer:
@@ -91,8 +125,6 @@ npm run desktop:dist
 The Windows installer is written to `release/windows/`. On macOS, run `npm run desktop:dist:mac` to build an Apple Silicon DMG in `release/mac/`. Installed users do not need Node.js or Podman. The desktop app stores its SQLite database in Electron's per-user `userData` directory and runs its API on loopback only. It uses the WebAssembly SQLite adapter, so no native compiler or Electron-specific SQLite rebuild is needed.
 
 The `Desktop Builds` GitHub Actions workflow builds both installers on every push and uploads separate Windows and Mac artifacts. Pushing a `v*` tag also publishes a GitHub Release with the `.exe` and `.dmg`. The Mac build is unsigned; sign and notarize it with Apple Developer credentials before distributing it broadly.
-
-To publish a release, update the package version, commit and push, then push the matching version tag (for example, `git tag v1.0.1` followed by `git push origin v1.0.1`). The workflow attaches both platform installers to that GitHub Release.
 
 The desktop and container editions currently use separate databases. Importing/exporting data between them is not implemented yet. Windows installers are unsigned unless a code-signing certificate is configured, so Windows may show a publisher warning.
 
