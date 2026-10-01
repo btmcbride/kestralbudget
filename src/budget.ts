@@ -90,24 +90,34 @@ const dialog = document.createElement('dialog');
 dialog.className = 'dialog';
 dialog.id = 'app-dialog';
 document.body.replaceChildren(root, dialog);
-const uid = () => crypto.randomUUID();
+const uid = (): string => {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
 const defaultCategories = (types: BudgetGroupId[] = GROUPS.map((g) => g.id)): BudgetCategory[] => GROUPS.filter((g) => types.includes(g.id)).map((g) => ({ id: uid(), type: g.id, name: g.name, entries: [] }));
 
+function normalizeState(budgets: Budget[], active: string | null | undefined): AppState {
+  return {
+    budgets: budgets.filter((budget) => Array.isArray(budget.categories)).map((budget) => ({ ...budget, seriesId: budget.seriesId || budget.id, carryover: Number(budget.carryover) || 0, selectedTypes: budget.selectedTypes || GROUPS.map((group) => group.id), transactions: Array.isArray(budget.transactions) ? budget.transactions.map((transaction) => ({ ...transaction, entryId: transaction.entryId ?? null })) : [] })),
+    active: active ?? null,
+    view: 'home',
+  };
+}
 function load(): AppState {
   try {
     const data = JSON.parse(localStorage.getItem(KEY) ?? 'null') as { budgets?: Budget[]; active?: string | null } | null;
-    if (Array.isArray(data?.budgets)) return {
-      budgets: data.budgets.filter((budget) => Array.isArray(budget.categories)).map((budget) => ({ ...budget, seriesId: budget.seriesId || budget.id, carryover: Number(budget.carryover) || 0, selectedTypes: budget.selectedTypes || GROUPS.map((group) => group.id), transactions: Array.isArray(budget.transactions) ? budget.transactions.map((transaction) => ({ ...transaction, entryId: transaction.entryId ?? null })) : [] })),
-      active: data.active ?? null,
-      view: 'home',
-    };
+    if (Array.isArray(data?.budgets)) return normalizeState(data.budgets, data.active);
   } catch { /* Start with a clean local workspace if stored data is invalid. */ }
-  return { budgets: [], active: null, view: 'home' };
+  return normalizeState([], null);
 }
-const state: AppState = load();
+const state: AppState = { budgets: [], active: null, view: 'home' };
 let wizard: WizardState | null = null;
 let dashboardTab: 'overview' | 'transactions' = 'overview';
 let saveTimer: number | undefined;
+let saveQueue: Promise<void> = Promise.resolve();
 const HTML_ENTITIES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, (character) => HTML_ENTITIES[character]);
 const fmt = (value: number): string => money.format(Number(value) || 0);
@@ -128,15 +138,57 @@ const displayDate = (date: string): string => {
   const [year, month, day] = date.split('-').map(Number);
   return year && month && day ? new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : date;
 };
+async function putState(budgets: Budget[], active: string | null): Promise<void> {
+  const response = await fetch('/api/state', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ budgets, active }),
+  });
+  if (!response.ok) throw new Error(`Budget save failed (${response.status}).`);
+}
 function persist() {
   const status = document.querySelector('#save-status');
   if (status) status.textContent = 'Saving';
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    localStorage.setItem(KEY, JSON.stringify({ budgets: state.budgets, active: state.active }));
-    const currentStatus = document.querySelector('#save-status');
-    if (currentStatus) currentStatus.textContent = 'All changes saved';
+    const payload = JSON.stringify({ budgets: state.budgets, active: state.active });
+    saveQueue = saveQueue.catch(() => undefined).then(async () => {
+      const response = await fetch('/api/state', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      });
+      if (!response.ok) throw new Error(`Budget save failed (${response.status}).`);
+      const currentStatus = document.querySelector('#save-status');
+      if (currentStatus) currentStatus.textContent = 'All changes saved';
+    }).catch(() => {
+      const currentStatus = document.querySelector('#save-status');
+      if (currentStatus) currentStatus.textContent = 'Save failed';
+    });
   }, 120);
+}
+async function initialize(): Promise<void> {
+  root.innerHTML = '<section class="welcome"><p class="overline">LOADING YOUR BUDGET</p><h1>Connecting to your budget data...</h1></section>';
+  try {
+    const response = await fetch('/api/state');
+    if (!response.ok) throw new Error(`Budget load failed (${response.status}).`);
+    const serverState = await response.json() as { budgets?: Budget[]; active?: string | null; initialized?: boolean };
+    if (serverState.initialized) {
+      if (!Array.isArray(serverState.budgets)) throw new Error('The saved budget data is invalid.');
+      const normalized = normalizeState(serverState.budgets, serverState.active);
+      state.budgets = normalized.budgets;
+      state.active = normalized.active;
+    } else {
+      const legacyState = load();
+      state.budgets = legacyState.budgets;
+      state.active = legacyState.active;
+      await putState(state.budgets, state.active);
+    }
+    render();
+  } catch (error) {
+    console.error(error);
+    root.innerHTML = '<section class="welcome"><p class="overline">DATA CONNECTION</p><h1>Unable to load budget data.</h1><p class="welcome-copy">Your saved data was not changed. Check the server and retry.</p><button class="button button-primary" data-action="retry-load">Retry</button></section>';
+  }
 }
 function groupTotals(budget: Budget, type: BudgetGroupId): AmountTotals {
   const categories = budget.categories.filter((category) => category.type === type);
@@ -183,7 +235,7 @@ function render(): void {
     <button class="home-link ${state.view === 'home' ? 'active' : ''}" data-action="home"><span class="home-icon">⌂</span>Overview</button>
     <div class="side-section-title"><span>YOUR BUDGETS</span><button class="icon-button" data-action="new-budget" aria-label="Create a new budget" title="Create a new budget">+</button></div>
     <nav class="budget-nav" aria-label="Your budgets">${series.length ? series.map((b) => `<button class="budget-nav-item ${b.seriesId === budget?.seriesId && state.view === 'budget' ? 'active' : ''}" data-action="select-series" data-id="${esc(b.seriesId)}"><span class="nav-month-icon">${seriesBudgets(b.seriesId).length}</span><span class="nav-budget-copy"><strong>${esc(b.name)}</strong><small>${seriesBudgets(b.seriesId).length} ${seriesBudgets(b.seriesId).length === 1 ? 'month' : 'months'}</small></span></button>`).join('') : '<p class="nav-empty">Your budgets<br>will show up here.</p>'}</nav>
-    <div class="sidebar-bottom"><span class="saved-dot"></span><span>Stored on this device</span><span id="save-status">All changes saved</span></div></aside>
+    <div class="sidebar-bottom"><span class="saved-dot"></span><span>Stored in app database</span><span id="save-status">All changes saved</span></div></aside>
     <main class="main-area"><header class="topbar"><div class="breadcrumb"><span>PERSONAL FINANCE</span><span class="crumb-divider">/</span><strong>${state.view === 'home' ? 'Overview' : esc(budget?.name)}</strong></div><button class="button button-primary top-new" data-action="new-budget"><span>+</span> New budget</button></header>${budget ? dashboard(budget, seriesBudgets(budget.seriesId)) : welcome()}</main></div>`;
 }
 function welcome(): string {
@@ -345,6 +397,7 @@ document.addEventListener('click', (event: MouseEvent) => {
   if (!(event.target instanceof Element)) return;
   const button = event.target.closest<HTMLButtonElement>('[data-action]'); if (!button) return;
   const { action, id, category, type, entry, transaction } = button.dataset;
+  if (action === 'retry-load') { void initialize(); return; }
   if (action === 'budget-view' && (button.dataset.view === 'overview' || button.dataset.view === 'transactions')) { dashboardTab = button.dataset.view; render(); }
   if (action === 'new-budget') newBudgetDialog();
   if (action === 'new-month') newMonthDialog();
@@ -467,4 +520,4 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
     persist(); dialog.close(); render();
   }
 });
-render();
+void initialize();

@@ -50,19 +50,25 @@ Amounts are displayed in US dollars (USD). The app does not connect to financial
 
 ### Requirements
 
-- Node.js 18 or later
+- Node.js 22 or later
 - npm
 
 ### Install and run
 
-From the project directory:
+From the project directory, start the API in one terminal:
 
 ```powershell
 npm install
+npm run api
+```
+
+Start the Vite frontend in a second terminal:
+
+```powershell
 npm run dev
 ```
 
-Vite prints the local URL when the server starts. The development server binds to `127.0.0.1` by default.
+Vite prints the local URL when it starts. Its `/api` requests are forwarded to the local API server.
 
 ### Build and type-check
 
@@ -71,11 +77,23 @@ npm run typecheck
 npm run build
 ```
 
-The static production site is generated in `dist/`. Serve that directory with a static web server to host the built app.
+The production container builds the frontend and runs it with the API server.
+
+### Run with Podman
+
+Create a named volume once, then build and run the container:
+
+```powershell
+podman volume create kestralbudget-data
+podman build -f DockerFile -t localhost/vaultbudget:latest .
+podman run -d --name vaultbudget -p 8888:8080 -v kestralbudget-data:/data:U localhost/vaultbudget:latest
+```
+
+Keep using the same `kestralbudget-data` volume when replacing the container. Remove an existing container with `podman rm -f vaultbudget` before running the replacement. Removing the container does not remove the volume; removing the volume permanently deletes the saved budgets.
 
 ## Data and privacy
 
-Budgets are stored in the browser's `localStorage`, scoped to the browser profile and site origin. No account, server-side storage, or automatic cloud sync is currently provided. Clearing the browser's site data can permanently remove budgets, so keep an independent backup of important information.
+Budgets are stored in a SQLite database at `/data/kestralbudget.sqlite` inside the container. Mount a persistent Podman volume at `/data` so the database survives container replacement. The app imports existing `localStorage` budgets once when the server database is first initialized; after that, the server database is authoritative. This is a single-user local app with no authentication, cloud sync, or automatic backups. Do not expose it to an untrusted network, and keep an independent backup of important data.
 
 The app restores the previously selected budget when available. A separate user-configurable default-budget preference, data export/import, and automatic recurring-paycheck scheduling are not currently implemented.
 
@@ -88,5 +106,6 @@ src/budget.css             Main interface and responsive styles
 src/budget-workflow.css    Dialog, setup, and action-menu styles
 tsconfig.json              Strict TypeScript configuration
 package.json               Scripts and development dependencies
+server.mjs                 Static file server and SQLite API
 dist/                      Generated production build
 ```
