@@ -1,5 +1,7 @@
 node_modules/
 dist/
 release/
+assets/kestral-budget.icns
+assets/kestral-budget.iconset/
 enhancements.md
 data/

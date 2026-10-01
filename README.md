@@ -88,7 +88,11 @@ npm install
 npm run desktop:dist
 ```
 
-The installer is written to `release/`. Installed users do not need Node.js or Podman. The desktop app stores its SQLite database in Electron's per-user `userData` directory and runs its API on loopback only. `npm run desktop` launches the development desktop app. It uses the WebAssembly SQLite adapter, so no native compiler or Electron-specific SQLite rebuild is needed.
+The Windows installer is written to `release/windows/`. On macOS, run `npm run desktop:dist:mac` to build an Apple Silicon DMG in `release/mac/`. Installed users do not need Node.js or Podman. The desktop app stores its SQLite database in Electron's per-user `userData` directory and runs its API on loopback only. It uses the WebAssembly SQLite adapter, so no native compiler or Electron-specific SQLite rebuild is needed.
+
+The `Desktop Builds` GitHub Actions workflow builds both installers on every push and uploads separate Windows and Mac artifacts. Pushing a `v*` tag also publishes a GitHub Release with the `.exe` and `.dmg`. The Mac build is unsigned; sign and notarize it with Apple Developer credentials before distributing it broadly.
+
+To publish a release, update the package version, commit and push, then push the matching version tag (for example, `git tag v1.0.1` followed by `git push origin v1.0.1`). The workflow attaches both platform installers to that GitHub Release.
 
 The desktop and container editions currently use separate databases. Importing/exporting data between them is not implemented yet. Windows installers are unsigned unless a code-signing certificate is configured, so Windows may show a publisher warning.
 
@@ -123,6 +127,6 @@ server.mjs                 Static file server and SQLite API
 desktop/main.cjs           Electron desktop application entry point
 icon.png                   Supplied kestrel logo artwork
 public/kestral-mark.png    Cropped transparent logo generated from icon.png
-scripts/build-icons.mjs    Generate Windows icon sizes from the SVG
+scripts/build-icons.mjs    Generate Windows and Mac icons from icon.png
 dist/                      Generated production build
 ```

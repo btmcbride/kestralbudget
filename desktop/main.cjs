@@ -25,7 +25,7 @@ if (!app.requestSingleInstanceLock()) {
       minWidth: 900,
       minHeight: 650,
       show: false,
-      icon: path.join(app.getAppPath(), 'assets', 'kestral-budget.ico'),
+      ...(process.platform === 'win32' ? { icon: path.join(app.getAppPath(), 'assets', 'kestral-budget.ico') } : {}),
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
