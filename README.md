@@ -79,6 +79,19 @@ npm run build
 
 The production container builds the frontend and runs it with the API server.
 
+### Build the Windows desktop installer
+
+On Windows x64, install dependencies and build the NSIS installer:
+
+```powershell
+npm install
+npm run desktop:dist
+```
+
+The installer is written to `release/`. Installed users do not need Node.js or Podman. The desktop app stores its SQLite database in Electron's per-user `userData` directory and runs its API on loopback only. `npm run desktop` launches the development desktop app. It uses the WebAssembly SQLite adapter, so no native compiler or Electron-specific SQLite rebuild is needed.
+
+The desktop and container editions currently use separate databases. Importing/exporting data between them is not implemented yet. Windows installers are unsigned unless a code-signing certificate is configured, so Windows may show a publisher warning.
+
 ### Run with Podman
 
 Create a named volume once, then build and run the container:
@@ -93,7 +106,7 @@ Keep using the same `kestralbudget-data` volume when replacing the container. Re
 
 ## Data and privacy
 
-Budgets are stored in a SQLite database at `/data/kestralbudget.sqlite` inside the container. Mount a persistent Podman volume at `/data` so the database survives container replacement. The app imports existing `localStorage` budgets once when the server database is first initialized; after that, the server database is authoritative. This is a single-user local app with no authentication, cloud sync, or automatic backups. Do not expose it to an untrusted network, and keep an independent backup of important data.
+The container edition stores budgets in `/data/kestralbudget.sqlite`; mount a persistent Podman volume there to retain data across container replacement. The desktop edition stores its SQLite database under Electron's per-user `userData` directory using the WebAssembly SQLite adapter. Each edition has its own database. The container app imports existing `localStorage` budgets once when its server database is first initialized; after that, the server database is authoritative. Neither edition has accounts, cloud sync, or automatic backups. Do not expose the container API to an untrusted network, and keep independent backups of important data.
 
 The app restores the previously selected budget when available. A separate user-configurable default-budget preference, data export/import, and automatic recurring-paycheck scheduling are not currently implemented.
 
@@ -107,5 +120,9 @@ src/budget-workflow.css    Dialog, setup, and action-menu styles
 tsconfig.json              Strict TypeScript configuration
 package.json               Scripts and development dependencies
 server.mjs                 Static file server and SQLite API
+desktop/main.cjs           Electron desktop application entry point
+icon.png                   Supplied kestrel logo artwork
+public/kestral-mark.png    Cropped transparent logo generated from icon.png
+scripts/build-icons.mjs    Generate Windows icon sizes from the SVG
 dist/                      Generated production build
 ```
