@@ -37,8 +37,12 @@ jobs:
               throw "Could not find the executable to sign!"
           }
           
+          # Force absolute paths to prevent signtool from getting lost
+          $dlib = Convert-Path ".signing/Azure.CodeSigning.Dlib.dll"
+          $dmdf = Convert-Path ".signing/metadata.json"
+          
           Write-Host "Signing: $($targetExe.FullName)"
-          & $signtool sign /v /fd SHA256 /tr "http://timestamp.acs.microsoft.com" /td SHA256 /dlib ".signing/Azure.CodeSigning.Dlib.dll" /dmdf ".signing/metadata.json" "$($targetExe.FullName)"
+          & $signtool sign /v /fd SHA256 /tr "http://timestamp.acs.microsoft.com" /td SHA256 /dlib $dlib /dmdf $dmdf "$($targetExe.FullName)" 
       - uses: actions/upload-artifact@v4
         with:
           name: KestralBudget-windows
