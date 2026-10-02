@@ -2,6 +2,8 @@ name: Desktop Builds
 
 on:
   push:
+    tags:
+      - 'v*' # This forces the workflow to ONLY trigger when a tag like v1.1.4 is pushed
   workflow_dispatch:
 
 permissions:
