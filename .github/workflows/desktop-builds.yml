@@ -23,13 +23,18 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Sign Executable
+        env:
+          AZURE_TENANT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).tenantId }}
+          AZURE_CLIENT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
+          AZURE_CLIENT_SECRET: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
         run: |
           $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
-          $targetExe = Get-ChildItem -Path "." -Filter "KestralBudget-Setup-*.exe" -Recurse | Select-Object -First 1
+          $targetExe = Get-ChildItem -Path "./release/windows" -Filter "*.exe" -Recurse | Select-Object -First 1
           
           if ($null -eq $targetExe) {
               throw "Could not find the executable to sign!"
           }
+          
           Write-Host "Signing: $($targetExe.FullName)"
           & $signtool sign /v /fd SHA256 /tr "http://timestamp.acs.microsoft.com" /td SHA256 /dlib ".signing/Azure.CodeSigning.Dlib.dll" /dmdf ".signing/metadata.json" "$($targetExe.FullName)"
       - uses: actions/upload-artifact@v4
