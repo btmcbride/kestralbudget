@@ -1,6 +1,6 @@
 {
   "name": "kestralbudget",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "Local-first monthly budgeting app",
   "author": "Kestral Budget",
   "private": true,
@@ -46,7 +46,13 @@
           ]
         }
       ],
-      "artifactName": "KestralBudget-Setup-${version}.${ext}"
+      "artifactName": "KestralBudget-Setup-${version}.${ext}",
+      "sign": {
+        "type": "azure",
+        "endpoint": "https://eus.codesigning.azure.net/",
+        "certificateProfileName": "BudgetAppProfile",
+        "codeSigningAccountName": "CrypticPath"
+      }
     },
     "mac": {
       "icon": "assets/kestral-budget.icns",
