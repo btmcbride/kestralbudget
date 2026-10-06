@@ -16,7 +16,7 @@ Kestral Budget is a local-first monthly budgeting app. Plan income and spending 
 
 ### Set up the budget
 
-Choose **Create your first budget** and select the sections to include. Income is always included; Bills, Expenses, Subscriptions, Debts, and Savings are optional. The setup wizard visits each selected section in order and lets you add budget items with planned amounts. You can skip a section's items and add them later.
+Choose **Create your first budget** and select the sections to include. Income is always included; Bills, Expenses, Subscriptions, Debts, and Savings are selected by default but can be unchecked. Add custom sections during setup as needed. The setup wizard visits each selected section in order and lets you add budget items with planned amounts. Bills, Subscriptions, and Debts items can also have an optional due date for reference. You can skip a section's items and add them later.
 
 For recurring income, choose a weekly, biweekly, or monthly frequency and enter the next payday. The app generates a planned income item for each scheduled payday in each month. One-off or irregular income can still be entered manually.
 
@@ -45,7 +45,7 @@ Reports lets you choose and run one of three reports: **Budget Performance** (pl
 
 Choose **+** beside the month tabs. A confirmation explains that creating the next month ends the current month and carries forward an amount based on the selected **Settings → New-month carryover** rule. The default is actual leftover; you can instead use planned unallocated income. The selected rule is recorded for each new month, so changing the preference only affects future months and leaves existing carryovers unchanged. The new month copies planned categories and budget items, resets actuals, and starts with an empty transaction ledger. Transactions remain with the month in which they were recorded.
 
-Use **Schedule item** in a non-income category to repeat a planned expense weekly, biweekly, or monthly. Each occurrence is added as a planned item with its due date; actual spending is recorded separately. Adding a schedule also fills matching future months already in the budget series.
+Use **Schedule item** in a non-income category to repeat a planned expense weekly, biweekly, or monthly. Each occurrence is added as a planned item with its due date; actual spending is recorded separately. Adding a schedule also fills matching future months already in the budget series. Optional due dates entered on ordinary Bills, Subscriptions, or Debts items are reminders only and do not repeat the item automatically.
 
 Use **Manage recurring** above the categories to edit a schedule, change its category, pause or resume it, or remove it. Changes update future planned entries in existing months. Historical entries and entries with actual amounts or linked transactions are retained when a schedule is paused or removed.
 
@@ -54,6 +54,8 @@ Use the ellipsis menu to delete the selected month. Carryovers for remaining mon
 ### Back up and restore data
 
 Use the export and import controls in the sidebar to download a JSON backup or restore one. A backup includes the budget's months and saved preferences. Importing replaces the current data after confirmation; when a legacy backup contains multiple independent budgets, only its active budget and its months are restored.
+
+To start over, choose **Settings → Delete budget**. This permanently removes all budget months, transactions, categories, and schedules while keeping display preferences. Choosing another page afterward opens the budget setup flow.
 
 ## Calculations
 

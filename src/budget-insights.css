@@ -135,6 +135,27 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.metric-card .metric-icon {
+  color: var(--green-text);
+}
+
+.category-symbol.green,
+.category-symbol.blue,
+.category-symbol.orange,
+.category-symbol.purple,
+.category-symbol.red,
+.category-symbol.teal {
+  color: var(--green-text);
+}
+
+.month-tab.selected::after {
+  background: var(--green);
+}
+
+.positive {
+  color: var(--green-text) !important;
+}
+
 .at-a-glance {
   margin-top: 0;
 }
@@ -156,15 +177,16 @@
 .summary-disclosure > summary {
   display: grid;
   min-height: 50px;
-  grid-template-columns: minmax(100px, 1fr) repeat(3, minmax(70px, auto));
+  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
   align-items: center;
-  gap: 10px;
+  gap: 0;
   padding: 9px 14px;
   color: var(--text-soft);
   cursor: pointer;
   list-style-position: inside;
   font-family: var(--mono);
   font-size: calc(11px * var(--text-scale, 1));
+  font-weight: 700;
   text-align: right;
 }
 
@@ -184,6 +206,7 @@
   color: var(--muted);
   font-family: 'DM Sans', sans-serif;
   font-size: calc(9px * var(--text-scale, 1));
+  font-weight: 400;
   text-align: right;
 }
 
@@ -194,7 +217,20 @@
 .summary-disclosure table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: calc(11px * var(--text-scale, 1));
+}
+
+.summary-disclosure .table-scroll {
+  padding: 0 14px;
+}
+
+.summary-disclosure .summary-label-column {
+  width: 40%;
+}
+
+.summary-disclosure .summary-value-column {
+  width: 20%;
 }
 
 .summary-disclosure th,
@@ -204,9 +240,21 @@
   text-align: right;
 }
 
+.summary-disclosure th,
+.summary-disclosure td {
+  padding-right: 0;
+  padding-left: 0;
+}
+
 .summary-disclosure th:first-child,
 .summary-disclosure td:first-child {
+  padding-left: 0;
   text-align: left;
+}
+
+.summary-disclosure th:last-child,
+.summary-disclosure td:last-child {
+  padding-right: 0;
 }
 
 .summary-disclosure th {
@@ -484,6 +532,75 @@
   margin: 1px 0 0;
   font-size: calc(11px * var(--text-scale, 1));
   line-height: 1.45;
+}
+
+.settings-danger-zone .settings-section-icon {
+  color: var(--danger-text);
+}
+
+.settings-danger-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 15px;
+  border: 1px solid color-mix(in srgb, var(--danger-text) 28%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger-text) 5%, var(--surface));
+}
+
+.settings-danger-actions p {
+  max-width: 470px;
+  margin: 0;
+  color: var(--muted);
+  font-size: calc(11px * var(--text-scale, 1));
+  line-height: 1.5;
+}
+
+.settings-danger-actions .button {
+  flex: 0 0 auto;
+}
+
+.group-picker .setup-group-add {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.setup-group-add .button {
+  min-height: 38px;
+}
+
+.group-picker .setup-group-error {
+  min-height: 0;
+  grid-column: 1 / -1;
+  margin: -3px 0 0;
+  color: var(--danger-text);
+}
+
+.wizard-row > span {
+  display: grid;
+  gap: 3px;
+}
+
+.wizard-row small,
+.wizard-due-date small {
+  color: var(--muted);
+  font-size: calc(9px * var(--text-scale, 1));
+}
+
+.wizard-due-date {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.wizard-due-date label {
+  color: var(--text-soft);
+  font-size: calc(11px * var(--text-scale, 1));
 }
 
 .report-page-heading {
@@ -952,6 +1069,15 @@
     min-width: 0;
   }
 
+  .settings-danger-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-danger-actions .button {
+    align-self: flex-start;
+  }
+
   .primary-nav {
     display: flex;
     overflow-x: auto;
@@ -1018,11 +1144,16 @@
   }
 
   .summary-disclosure > summary {
-    grid-template-columns: minmax(72px, 1fr) repeat(3, minmax(55px, auto));
-    gap: 5px;
+    grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
+    gap: 0;
     padding-right: 7px;
     padding-left: 7px;
     font-size: calc(9px * var(--text-scale, 1));
+  }
+
+  .summary-disclosure .table-scroll {
+    padding-right: 7px;
+    padding-left: 7px;
   }
 
   .summary-disclosure > summary strong {

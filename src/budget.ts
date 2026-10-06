@@ -206,7 +206,15 @@ const uid = (): string => {
   const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 };
-const defaultCategories = (types: BudgetGroupId[] = GROUPS.map((g) => g.id)): BudgetCategory[] => GROUPS.filter((g) => types.includes(g.id)).map((g) => ({ id: uid(), type: g.id, name: g.name, entries: [] }));
+const defaultCategories = (groups: BudgetGroup[]): BudgetCategory[] => groups.map((item) => ({
+  id: uid(),
+  type: item.id,
+  ...(item.id.startsWith('custom:') ? { typeName: item.name } : {}),
+  name: item.name,
+  entries: [],
+}));
+const supportsEntryDueDate = (type: BudgetGroupId | undefined): boolean =>
+  type === 'bills' || type === 'subscriptions' || type === 'debts';
 const DEFAULT_TRANSACTION_SORT: TransactionSortConfig = { field: 'date', direction: 'desc' };
 const isCarryoverMethod = (value: unknown): value is CarryoverMethod => value === 'actual' || value === 'planned';
 const ACCENT_COLORS: Array<[AccentColor, string]> = [['forest', 'Forest green'], ['blue', 'Blue'], ['purple', 'Purple'], ['amber', 'Amber'], ['rose', 'Rose']];
@@ -579,7 +587,7 @@ function render(): void {
     const carryoverMethods: Array<[CarryoverMethod, string]> = [['actual', 'Actual leftover'], ['planned', 'Planned unallocated income']];
     const settingRow = (id: string, title: string, description: string, options: Array<[string, string]>, selectedValue: string): string =>
       `<label class="settings-option-row" for="${id}"><span><strong>${title}</strong><small>${description}</small></span><select id="${id}" aria-label="${title}">${options.map(([value, label]) => `<option value="${value}" ${value === selectedValue ? 'selected' : ''}>${label}</option>`).join('')}</select></label>`;
-    return `<section class="dashboard page-content settings-page"><div class="page-heading settings-page-heading"><div><p class="panel-kicker">PREFERENCES</p><h1>Settings</h1><p class="heading-subtitle">Personalize how Kestral Budget looks and formats your budget.</p></div></div><div class="settings-card"><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">◐</span><div><h2>Appearance</h2><p>Choose a look and layout that feels right for you.</p></div></div>${settingRow('theme-select', 'Color theme', 'Choose a theme or follow your device setting.', themes, state.preferences.theme ?? 'system')}${settingRow('accent-color-select', 'Accent color', 'Personalize highlights and interactive accents.', ACCENT_COLORS, state.preferences.accentColor ?? 'forest')}${settingRow('text-size-select', 'Text size', 'Adjust text throughout the app.', TEXT_SIZES, state.preferences.textSize ?? 'medium')}${settingRow('density-select', 'Layout density', 'Choose more breathing room or a compact view.', DENSITIES, state.preferences.density ?? 'comfortable')}</section><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">¤</span><div><h2>Regional formats</h2><p>Choose the currency and date style used across your budget.</p></div></div>${settingRow('currency-select', 'Currency', 'Display amounts using this currency; values are not converted.', CURRENCIES, state.preferences.currency ?? 'USD')}${settingRow('date-format-select', 'Date format', 'Use a familiar regional format or the ISO 8601 standard.', DATE_FORMATS, state.preferences.dateFormat ?? 'mdy')}</section><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">▦</span><div><h2>Calendar</h2><p>Set the week layout for your subscription calendar.</p></div></div>${settingRow('week-start-select', 'First day of the week', 'Choose Sunday or Monday as the first weekday.', weekStarts, state.preferences.weekStartsOn ?? 'sunday')}</section><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">↻</span><div><h2>Month rollover</h2><p>Choose how unallocated money carries into a new month.</p></div></div>${settingRow('carryover-method-select', 'New-month carryover', "Pick the basis for calculating the next month's opening carryover.", carryoverMethods, state.preferences.carryoverMethod ?? 'actual')}<div class="settings-note"><span aria-hidden="true">i</span><p>Changes apply to months created from now on. Existing month carryovers are preserved.</p></div></section></div></section>`;
+    return `<section class="dashboard page-content settings-page"><div class="page-heading settings-page-heading"><div><p class="panel-kicker">PREFERENCES</p><h1>Settings</h1><p class="heading-subtitle">Personalize how Kestral Budget looks and formats your budget.</p></div></div><div class="settings-card"><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">◐</span><div><h2>Appearance</h2><p>Choose a look and layout that feels right for you.</p></div></div>${settingRow('theme-select', 'Color theme', 'Choose a theme or follow your device setting.', themes, state.preferences.theme ?? 'system')}${settingRow('accent-color-select', 'Accent color', 'Personalize highlights and interactive accents.', ACCENT_COLORS, state.preferences.accentColor ?? 'forest')}${settingRow('text-size-select', 'Text size', 'Adjust text throughout the app.', TEXT_SIZES, state.preferences.textSize ?? 'medium')}${settingRow('density-select', 'Layout density', 'Choose more breathing room or a compact view.', DENSITIES, state.preferences.density ?? 'comfortable')}</section><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">¤</span><div><h2>Regional formats</h2><p>Choose the currency and date style used across your budget.</p></div></div>${settingRow('currency-select', 'Currency', 'Display amounts using this currency; values are not converted.', CURRENCIES, state.preferences.currency ?? 'USD')}${settingRow('date-format-select', 'Date format', 'Use a familiar regional format or the ISO 8601 standard.', DATE_FORMATS, state.preferences.dateFormat ?? 'mdy')}</section><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">▦</span><div><h2>Calendar</h2><p>Set the week layout for your subscription calendar.</p></div></div>${settingRow('week-start-select', 'First day of the week', 'Choose Sunday or Monday as the first weekday.', weekStarts, state.preferences.weekStartsOn ?? 'sunday')}</section><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">↻</span><div><h2>Month rollover</h2><p>Choose how unallocated money carries into a new month.</p></div></div>${settingRow('carryover-method-select', 'New-month carryover', "Pick the basis for calculating the next month's opening carryover.", carryoverMethods, state.preferences.carryoverMethod ?? 'actual')}<div class="settings-note"><span aria-hidden="true">i</span><p>Changes apply to months created from now on. Existing month carryovers are preserved.</p></div></section>${state.budgets.length ? '<section class="settings-section settings-danger-zone"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">!</span><div><h2>Delete budget</h2><p>Permanently remove this budget, including all months, transactions, categories, and schedules.</p></div></div><div class="settings-danger-actions"><p>Your appearance and regional preferences will be kept. You will need to set up a new budget before returning to the other pages.</p><button class="button button-danger" type="button" data-action="delete-budget">Delete budget</button></div></section>' : ''}</div></section>`;
   }
   if (budget?.expenseSchedules.length && state.view === 'dashboard') {
     const categoryHeading = root.querySelector<HTMLElement>('.categories-section .section-title-row > div');
@@ -735,7 +743,7 @@ function dashboard(b: Budget, budgets: Budget[]): string {
     const diffClass = isIncome
       ? actual > planned ? 'positive' : actual < planned ? 'negative' : ''
       : actual > planned ? 'negative' : actual < planned ? 'positive' : '';
-    return `<details class="summary-disclosure" open><summary><strong>${label}</strong><span><small>Planned</small>${fmt(planned)}</span><span><small>Actual</small>${fmt(actual)}</span><span class="${diffClass}"><small>Diff</small>${signed(actual - planned)}</span></summary><div class="table-scroll"><table><thead><tr><th>${label === 'Income' ? 'INCOME SOURCE' : 'CATEGORY'}</th><th>PLANNED</th><th>ACTUAL</th><th>DIFF</th></tr></thead><tbody>${rows || `<tr><td colspan="4">No ${label.toLowerCase()} items yet.</td></tr>`}</tbody></table></div></details>`;
+    return `<details class="summary-disclosure" open><summary><strong>${label}</strong><span><small>Planned</small>${fmt(planned)}</span><span><small>Actual</small>${fmt(actual)}</span><span class="${diffClass}"><small>Diff</small>${signed(actual - planned)}</span></summary><div class="table-scroll"><table><colgroup><col class="summary-label-column"><col class="summary-value-column" span="3"></colgroup><thead><tr><th>${label === 'Income' ? 'INCOME SOURCE' : 'CATEGORY'}</th><th>PLANNED</th><th>ACTUAL</th><th>DIFF</th></tr></thead><tbody>${rows || `<tr><td colspan="4">No ${label.toLowerCase()} items yet.</td></tr>`}</tbody></table></div></details>`;
   };
   const incomeTotalActual = summary.income.actual;
   const categoryActual = summary.out.actual;
@@ -767,7 +775,7 @@ function dashboard(b: Budget, budgets: Budget[]): string {
       ${metricCard('Allocated Income', '≋', summary.out.planned, '<span>Planned across categories</span>')}
     </section>
     <section class="dashboard-grid dashboard-insights" ${isTransactionsPage ? 'hidden' : ''}>
-      <section class="panel at-a-glance"><div class="panel-heading"><div><p class="panel-kicker">MONTHLY SUMMARY</p><h2>At a glance</h2></div></div>
+      <section class="panel at-a-glance"><div class="panel-heading"><div><p class="panel-kicker">MONTHLY SUMMARY</p><h2>At-A-Glance</h2></div></div>
         ${summaryDisclosure('Income', summary.income.planned, incomeTotalActual, incomeRows, true)}
         ${summaryDisclosure('Categories', summary.out.planned, categoryActual, categoryRows)}
       </section>
@@ -1070,14 +1078,56 @@ function categoryCard(g: BudgetGroup, budget: Budget): string {
     : actual > planned ? 'negative' : actual < planned ? 'positive' : '';
   const symbols: Record<string, string> = { income: '↗', bills: '▤', expenses: '◔', subscriptions: '↻', debts: '◧', savings: '◈' };
   const symbol = symbols[g.id] || '●';
-  const body = `${cats.length ? cats.map((c) => `<div class="sub-category"><div class="sub-category-title"><span>${esc(c.name)}</span><span class="sub-category-actions"><button class="text-action" data-action="add-entry" data-category="${esc(c.id)}">Add item</button>${g.id === 'income' ? '' : `<button class="text-action" data-action="add-expense-schedule" data-category="${esc(c.id)}">Schedule item</button>`}</span></div>${c.entries.length ? c.entries.map((e) => { const actualForEntry = entryActual(budget, e); const expenseSchedule = budget.expenseSchedules.find((item) => item.id === e.scheduleId); const scheduleLabel = expenseSchedule ? `${PAY_FREQUENCIES.find((item) => item.value === expenseSchedule.frequency)?.label ?? 'Recurring'} · ${displayDate(e.scheduledDate ?? expenseSchedule.nextDueDate)}` : ''; return `<button class="entry-row" data-action="edit-entry" data-category="${esc(c.id)}" data-entry="${esc(e.id)}"><span class="entry-name">${esc(e.name)}${scheduleLabel ? `<small class="entry-schedule">${esc(scheduleLabel)}</small>` : ''}</span><span class="entry-planned">${fmt(e.planned)}</span><span class="entry-actual ${actualForEntry > +e.planned && g.id !== 'income' ? 'negative' : ''}">${fmt(actualForEntry)}</span></button>`; }).join('') : '<p class="category-empty">Nothing added yet</p>'}</div>`).join('') : `<div class="first-category"><span>No ${g.name.toLowerCase()} categories yet</span><button class="text-action" data-action="add-category" data-type="${esc(g.id)}">Create one</button></div>`}`;
-  return `<section class="category-card"><header class="category-header"><span class="category-symbol ${g.color}">${symbol}</span><div class="category-heading"><h3>${g.name}</h3><span>${entries.length} ${entries.length === 1 ? 'item' : 'items'}</span></div><div class="category-total"><strong>${fmt(planned)}</strong><small>planned</small></div><div class="category-actions"><button class="icon-button add-small" data-action="add-entry" data-type="${esc(g.id)}" data-category="${esc(cats[0]?.id || '')}" aria-label="Add ${esc(g.name)} entry">+</button></div></header><div class="category-progress"><span class="${actual > planned && g.id !== 'income' ? 'over-budget' : ''}" style="width:${planned ? Math.min(100, actual / planned * 100) : (actual ? 100 : 0)}%"></span></div>${body}<footer class="category-footer"><span>Actual ${fmt(actual)}</span><span class="${differenceClass}">${signed(actual - planned)} diff</span></footer></section>`;
+  const body = `${cats.length ? cats.map((c) => `<div class="sub-category"><div class="sub-category-title"><span>${esc(c.name)}</span><span class="sub-category-actions"><button class="text-action" data-action="add-entry" data-category="${esc(c.id)}">Add item</button>${g.id === 'income' ? '' : `<button class="text-action" data-action="add-expense-schedule" data-category="${esc(c.id)}">Schedule item</button>`}</span></div>${c.entries.length ? c.entries.map((e) => { const actualForEntry = entryActual(budget, e); const expenseSchedule = budget.expenseSchedules.find((item) => item.id === e.scheduleId); const scheduleLabel = expenseSchedule ? `${PAY_FREQUENCIES.find((item) => item.value === expenseSchedule.frequency)?.label ?? 'Recurring'} · ${displayDate(e.scheduledDate ?? expenseSchedule.nextDueDate)}` : e.dueDate ? `Due ${displayDate(e.dueDate)}` : ''; return `<button class="entry-row" data-action="edit-entry" data-category="${esc(c.id)}" data-entry="${esc(e.id)}"><span class="entry-name">${esc(e.name)}${scheduleLabel ? `<small class="entry-schedule">${esc(scheduleLabel)}</small>` : ''}</span><span class="entry-planned">${fmt(e.planned)}</span><span class="entry-actual ${actualForEntry > +e.planned && g.id !== 'income' ? 'negative' : ''}">${fmt(actualForEntry)}</span></button>`; }).join('') : '<p class="category-empty">Nothing added yet</p>'}</div>`).join('') : `<div class="first-category"><span>No ${esc(g.name.toLowerCase())} categories yet</span><button class="text-action" data-action="add-category" data-type="${esc(g.id)}">Create one</button></div>`}`;
+  return `<section class="category-card"><header class="category-header"><span class="category-symbol ${g.color}">${symbol}</span><div class="category-heading"><h3>${esc(g.name)}</h3><span>${entries.length} ${entries.length === 1 ? 'item' : 'items'}</span></div><div class="category-total"><strong>${fmt(planned)}</strong><small>planned</small></div><div class="category-actions"><button class="icon-button add-small" data-action="add-entry" data-type="${esc(g.id)}" data-category="${esc(cats[0]?.id || '')}" aria-label="Add ${esc(g.name)} entry">+</button></div></header><div class="category-progress"><span class="${actual > planned && g.id !== 'income' ? 'over-budget' : ''}" style="width:${planned ? Math.min(100, actual / planned * 100) : (actual ? 100 : 0)}%"></span></div>${body}<footer class="category-footer"><span>Actual ${fmt(actual)}</span><span class="${differenceClass}">${signed(actual - planned)} diff</span></footer></section>`;
 }
 
 function open(content: string): void { dialog.innerHTML = content; if (!dialog.open) dialog.showModal(); }
 function newBudgetDialog(): void {
   if (state.budgets.length) return;
-  open(`<form class="dialog-form" data-form="budget"><div class="dialog-topline"><span class="dialog-icon">◷</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">START YOUR BUDGET</p><h2>Set up your budget</h2><p class="dialog-copy">Choose the sections you want to include. You can add or remove categories later.</p><fieldset class="group-picker"><legend>Budget sections</legend>${GROUPS.map((g) => `<label class="group-option"><input type="checkbox" name="groups" value="${g.id}" ${g.id === 'income' ? 'checked disabled' : 'checked'}><span class="type-dot ${g.color}"></span><span>${g.name}</span>${g.id === 'income' ? '<small>Required</small>' : ''}</label>`).join('')}</fieldset><div class="dialog-actions"><button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">Set up <span>→</span></button></div></form>`);
+  open(`<form class="dialog-form" data-form="budget"><div class="dialog-topline"><span class="dialog-icon">◷</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">START YOUR BUDGET</p><h2>Set up your budget</h2><p class="dialog-copy">Choose the sections you want to include. Income is required; the others start selected and can be unchecked.</p><fieldset class="group-picker"><legend>Budget sections</legend>${GROUPS.map((g) => `<label class="group-option"><input type="checkbox" name="groups" value="${g.id}" ${g.id === 'income' ? 'checked disabled' : 'checked'}><span class="type-dot ${g.color}"></span><span>${g.name}</span>${g.id === 'income' ? '<small>Required</small>' : ''}</label>`).join('')}<div class="setup-group-add"><input id="setup-group-name" type="text" maxlength="40" placeholder="Add a custom section" aria-label="Custom section name"><button class="button button-secondary" type="button" data-action="add-setup-group">Add section</button></div><p class="setup-group-error" id="setup-group-error" role="status" aria-live="polite"></p></fieldset><div class="dialog-actions"><button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">Set up <span>→</span></button></div></form>`);
+}
+function addSetupGroup(): void {
+  const form = requiredElement<HTMLFormElement>(dialog, 'form[data-form="budget"]');
+  const nameInput = requiredElement<HTMLInputElement>(form, '#setup-group-name');
+  const name = nameInput.value.trim();
+  const error = requiredElement<HTMLElement>(form, '#setup-group-error');
+  if (!name) {
+    error.textContent = 'Enter a name for the custom section.';
+    nameInput.focus();
+    return;
+  }
+  const existingInputs = [...form.querySelectorAll<HTMLInputElement>('input[name="groups"]')];
+  const normalizedName = name.toLocaleLowerCase();
+  if (GROUPS.some((group) => group.name.toLocaleLowerCase() === normalizedName)
+    || existingInputs.some((input) => input.dataset.groupName?.toLocaleLowerCase() === normalizedName)) {
+    error.textContent = 'A section with that name already exists.';
+    nameInput.focus();
+    return;
+  }
+  const slug = name.toLocaleLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || uid();
+  let type = `custom:${slug}`;
+  let suffix = 2;
+  while (existingInputs.some((input) => input.value === type)) type = `custom:${slug}-${suffix++}`;
+  const option = document.createElement('label');
+  option.className = 'group-option';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.name = 'groups';
+  checkbox.value = type;
+  checkbox.dataset.groupName = name;
+  checkbox.checked = true;
+  const color = document.createElement('span');
+  color.className = 'type-dot teal';
+  const label = document.createElement('span');
+  label.textContent = name;
+  const customBadge = document.createElement('small');
+  customBadge.textContent = 'Custom';
+  option.append(checkbox, color, label, customBadge);
+  requiredElement<HTMLElement>(form, '.setup-group-add').before(option);
+  nameInput.value = '';
+  error.textContent = '';
+  nameInput.focus();
 }
 function getWizard(): WizardState | null {
   return wizard;
@@ -1091,19 +1141,23 @@ function wizardView(): void {
   const b = state.budgets.find((item) => item.id === wizard.budgetId);
   if (!b) return;
   const steps = wizard.groups || GROUPS.map((group) => group.id);
-  const g = GROUPS.find((group) => group.id === steps[wizard.step]);
+  const g = groupsFor(b).find((group) => group.id === steps[wizard.step]);
   if (!g) { state.active = b.id; state.view = 'dashboard'; clearWizard(); persist(); render(); dialog.close(); setupCompleteDialog(); return; }
   const cats = b.categories.filter((c) => c.type === g.id);
   const count = b.categories.reduce((n, c) => n + c.entries.length, 0);
-  dialog.innerHTML = `<div class="wizard"><div class="wizard-head"><span class="dialog-icon">${wizard.step + 1}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">BUDGET SETUP · ${wizard.step + 1} OF 6</p><div class="wizard-progress">${GROUPS.map((_, i) => `<span class="${i <= wizard.step ? 'done' : ''}"></span>`).join('')}</div><h2>Add ${g.name.toLowerCase()}</h2><p class="dialog-copy">${({ income: 'Start with money coming in. Add each source and its monthly planned amount.', bills: 'Add regular bills like rent, utilities, and insurance.', expenses: 'Add flexible spending such as groceries and transport.', subscriptions: 'Keep recurring memberships and services together.', debts: 'Plan payments toward loans, cards, and balances.', savings: 'Set aside money for goals, reserves, and future plans.' })[g.id]}</p><div class="wizard-existing">${cats.flatMap((c) => c.entries.map((e) => `<div class="wizard-row"><span>${esc(e.name)}</span><strong>${fmt(e.planned)}</strong></div>`)).join('') || '<span class="wizard-empty">Add items now, or skip this step and return later.</span>'}</div><form class="wizard-add-form" data-form="wizard-entry"><label for="wizard-name">${g.id === 'income' ? 'Income source' : 'Item name'}</label><div class="wizard-fields"><input id="wizard-name" name="name" placeholder="${g.id === 'income' ? 'e.g. Paycheck' : 'e.g. Monthly amount'}" maxlength="80" required><label class="sr-only" for="wizard-amount">Planned amount</label><span class="currency-prefix">$</span><input id="wizard-amount" name="planned" type="number" min="0" step="0.01" placeholder="0.00" required>${g.id === 'income' ? '<label for="wizard-pay-frequency">Pay frequency</label><select id="wizard-pay-frequency" name="frequency">' + PAY_FREQUENCIES.map((option) => `<option value="${option.value}" ${option.value === 'biweekly' ? 'selected' : ''}>${option.label}</option>`).join('') + '</select><label for="wizard-next-payday">Next payday</label><input id="wizard-next-payday" name="nextPayday" type="date">' : ''}</div><button class="button button-secondary wizard-add-button" type="submit">＋ Add ${g.id === 'income' ? 'income' : 'item'}</button></form><div class="dialog-actions wizard-actions"><button class="button button-secondary" data-action="wizard-back" type="button" ${wizard.step === 0 ? 'disabled' : ''}>Back</button><span class="wizard-count">${count} ${count === 1 ? 'item' : 'items'} added</span><button class="button button-primary" data-action="wizard-next" type="button">${wizard.step === 5 ? 'Finish setup' : 'Continue'} <span>→</span></button></div></div>`;
-  const progress = requiredElement<HTMLElement>(dialog, '.wizard-progress');
-  progress.replaceChildren(...steps.map((_, index) => {
-    const segment = document.createElement('span');
-    if (index <= wizard.step) segment.classList.add('done');
-    return segment;
-  }));
-  requiredElement<HTMLElement>(dialog, '.wizard .panel-kicker').textContent = `BUDGET SETUP · ${wizard.step + 1} OF ${steps.length}`;
-  requiredElement<HTMLButtonElement>(dialog, '[data-action="wizard-next"]').innerHTML = `${wizard.step === steps.length - 1 ? 'Finish setup' : 'Continue'} <span>→</span>`;
+  const descriptions: Partial<Record<BudgetGroupId, string>> = {
+    income: 'Start with money coming in. Add each source and its monthly planned amount.',
+    bills: 'Add regular bills like rent, utilities, and insurance.',
+    expenses: 'Add flexible spending such as groceries and transport.',
+    subscriptions: 'Keep recurring memberships and services together.',
+    debts: 'Plan payments toward loans, cards, and balances.',
+    savings: 'Set aside money for goals, reserves, and future plans.',
+  };
+  const dueDateField = supportsEntryDueDate(g.id)
+    ? '<div class="wizard-due-date"><label for="wizard-due-date">Due date <span>(optional)</span></label><input id="wizard-due-date" name="dueDate" type="date"><small>For reminders only; you can edit it later.</small></div>'
+    : '';
+  const entryRows = cats.flatMap((category) => category.entries.map((item) => `<div class="wizard-row"><span>${esc(item.name)}${item.dueDate ? `<small>Due ${esc(displayDate(item.dueDate))}</small>` : ''}</span><strong>${fmt(item.planned)}</strong></div>`)).join('');
+  dialog.innerHTML = `<div class="wizard"><div class="wizard-head"><span class="dialog-icon">${wizard.step + 1}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">BUDGET SETUP · ${wizard.step + 1} OF ${steps.length}</p><div class="wizard-progress" role="group" aria-label="Setup step ${wizard.step + 1} of ${steps.length}" style="grid-template-columns:repeat(${steps.length},minmax(0,1fr))">${steps.map((_, index) => `<span class="${index <= wizard.step ? 'done' : ''}"></span>`).join('')}</div><h2>Add ${esc(g.name.toLowerCase())}</h2><p class="dialog-copy">${descriptions[g.id] ?? `Add planned items for ${esc(g.name)}.`}</p><div class="wizard-existing">${entryRows || '<span class="wizard-empty">Add items now, or skip this step and return later.</span>'}</div><form class="wizard-add-form" data-form="wizard-entry"><label for="wizard-name">${g.id === 'income' ? 'Income source' : 'Item name'}</label><div class="wizard-fields"><input id="wizard-name" name="name" placeholder="${g.id === 'income' ? 'e.g. Paycheck' : 'e.g. Monthly amount'}" maxlength="80" required><label class="sr-only" for="wizard-amount">Planned amount</label><span class="currency-prefix">$</span><input id="wizard-amount" name="planned" type="number" min="0" step="0.01" placeholder="0.00" required>${g.id === 'income' ? '<label for="wizard-pay-frequency">Pay frequency</label><select id="wizard-pay-frequency" name="frequency">' + PAY_FREQUENCIES.map((option) => `<option value="${option.value}" ${option.value === 'biweekly' ? 'selected' : ''}>${option.label}</option>`).join('') + '</select><label for="wizard-next-payday">Next payday</label><input id="wizard-next-payday" name="nextPayday" type="date">' : ''}</div>${dueDateField}<button class="button button-secondary wizard-add-button" type="submit">＋ Add ${g.id === 'income' ? 'income' : 'item'}</button></form><div class="dialog-actions wizard-actions"><button class="button button-secondary" data-action="wizard-back" type="button" ${wizard.step === 0 ? 'disabled' : ''}>Back</button><span class="wizard-count">${count} ${count === 1 ? 'item' : 'items'} added</span><button class="button button-primary" data-action="wizard-next" type="button">${wizard.step === steps.length - 1 ? 'Finish setup' : 'Continue'} <span>→</span></button></div></div>`;
 }
 function monthAfter(month: string): string {
   const [year, number] = month.split('-').map(Number);
@@ -1137,6 +1191,33 @@ function deleteCurrentMonth(): void {
     state.active = removedBudget.id;
   });
   persist();
+  render();
+}
+async function deleteBudget(): Promise<void> {
+  const budget = current();
+  if (!budget || !state.budgets.length) return;
+  const monthCount = state.budgets.length;
+  const transactionCount = state.budgets.reduce((total, month) => total + month.transactions.length, 0);
+  const confirmed = window.confirm(
+    `Permanently delete this budget and all ${monthCount} ${monthCount === 1 ? 'month' : 'months'}, including ${transactionCount} ${transactionCount === 1 ? 'transaction' : 'transactions'}, categories, and schedules? This cannot be undone. Export a backup first if you may need this data later.`,
+  );
+  if (!confirmed) return;
+  clearTimeout(saveTimer);
+  saveTimer = undefined;
+  try {
+    await saveQueue;
+    await putState([], null, state.preferences);
+  } catch (error) {
+    console.error(error);
+    window.alert('The budget could not be deleted because the change could not be saved. Your data is unchanged.');
+    return;
+  }
+  clearUndo();
+  state.budgets = [];
+  state.active = null;
+  state.view = 'settings';
+  wizard = null;
+  selectedTransactionIds.clear();
   render();
 }
 function newMonthDialog(): void {
@@ -1310,12 +1391,12 @@ function entryDialog(categoryId: string = '', type: string = 'expenses', entry: 
   const wantedType = cat?.type || type;
   const options = b.categories.filter((c) => c.type === wantedType);
   const selected = cat?.id || options[0]?.id || '';
-  open(`<form class="dialog-form" data-form="${entry ? 'edit-entry' : 'entry'}" data-entry="${esc(entry?.id || '')}"><div class="dialog-topline"><span class="dialog-icon">${entry ? '↗' : '＋'}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">${entry ? 'UPDATE YOUR PLAN' : 'ADD TO YOUR PLAN'}</p><h2>${entry ? 'Edit entry' : 'New entry'}</h2><label for="entry-name">Name</label><input id="entry-name" name="name" maxlength="80" value="${esc(entry?.name || '')}" placeholder="e.g. Electricity" required><label for="entry-category">Category</label><select id="entry-category" name="categoryId" required>${b.categories.map((c) => `<option value="${esc(c.id)}" ${c.id === selected ? 'selected' : ''}>${esc(c.name)} · ${group(c.type).name}</option>`).join('')}</select><div class="amount-fields"><div><label for="entry-planned">Planned</label><div class="input-money"><span>$</span><input id="entry-planned" name="planned" type="number" min="0" step="0.01" value="${esc(entry?.planned ?? 0)}" required></div></div><div><label for="entry-actual">Actual</label><div class="input-money"><span>$</span><input id="entry-actual" name="actual" type="number" min="0" step="0.01" value="${esc(entry?.actual ?? 0)}" required></div></div></div><div class="dialog-actions">${entry ? `<button class="button button-danger" data-action="delete-entry" data-entry="${esc(entry.id)}" type="button">Delete</button>` : '<span></span>'}<button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">${entry ? 'Save changes' : 'Add entry'}</button></div></form>`);
+  open(`<form class="dialog-form" data-form="${entry ? 'edit-entry' : 'entry'}" data-entry="${esc(entry?.id || '')}"><div class="dialog-topline"><span class="dialog-icon">${entry ? '↗' : '＋'}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">${entry ? 'UPDATE YOUR PLAN' : 'ADD TO YOUR PLAN'}</p><h2>${entry ? 'Edit entry' : 'New entry'}</h2><label for="entry-name">Name</label><input id="entry-name" name="name" maxlength="80" value="${esc(entry?.name || '')}" placeholder="e.g. Electricity" required><label for="entry-category">Category</label><select id="entry-category" name="categoryId" required>${b.categories.map((c) => `<option value="${esc(c.id)}" ${c.id === selected ? 'selected' : ''}>${esc(c.name)} · ${esc(group(c.type).name)}</option>`).join('')}</select><div class="amount-fields"><div><label for="entry-planned">Planned</label><div class="input-money"><span>$</span><input id="entry-planned" name="planned" type="number" min="0" step="0.01" value="${esc(entry?.planned ?? 0)}" required></div></div><div><label for="entry-actual">Actual</label><div class="input-money"><span>$</span><input id="entry-actual" name="actual" type="number" min="0" step="0.01" value="${esc(entry?.actual ?? 0)}" required></div></div></div><div class="dialog-actions">${entry ? `<button class="button button-danger" data-action="delete-entry" data-entry="${esc(entry.id)}" type="button">Delete</button>` : '<span></span>'}<button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">${entry ? 'Save changes' : 'Add entry'}</button></div></form>`);
   const dueDateField = document.createElement('div');
   dueDateField.id = 'entry-due-date-field';
   dueDateField.className = 'subscription-date-field';
-  dueDateField.hidden = cat?.type !== 'subscriptions' || Boolean(entry?.scheduleId);
-  dueDateField.innerHTML = `<label for="entry-due-date">Next due date <span class="field-optional">Optional</span></label><input id="entry-due-date" name="dueDate" type="date" value="${esc(entry?.dueDate ?? '')}"><small>For reminders only. To add this charge to future budgets, use the Schedule option in the tracker.</small>`;
+  dueDateField.hidden = !supportsEntryDueDate(cat?.type) || Boolean(entry?.scheduleId);
+  dueDateField.innerHTML = `<label for="entry-due-date">Due date <span class="field-optional">Optional</span></label><input id="entry-due-date" name="dueDate" type="date" value="${esc(entry?.dueDate ?? '')}"><small>For reminders only; planned items do not repeat automatically.</small>`;
   requiredElement<HTMLElement>(dialog, '.amount-fields').after(dueDateField);
   requiredElement<HTMLInputElement>(dialog, '#entry-name').focus();
 }
@@ -1326,13 +1407,16 @@ document.addEventListener('click', (event: MouseEvent) => {
   if (openBudgetMenu && !openBudgetMenu.contains(event.target)) openBudgetMenu.open = false;
   const button = event.target.closest<HTMLButtonElement>('[data-action]'); if (!button) return;
   const { action, id, category, type, entry, transaction, schedule } = button.dataset;
+  if (action === 'add-setup-group') { addSetupGroup(); return; }
   if (action === 'navigate' && ['dashboard', 'transactions', 'subscriptions', 'review', 'reports', 'settings'].includes(button.dataset.page ?? '')) {
     state.view = button.dataset.page as AppState['view'];
     if (state.view === 'reports') activeReport = null;
     if (state.view === 'dashboard' || state.view === 'transactions') dashboardTab = state.view === 'transactions' ? 'transactions' : 'overview';
     render();
+    if (!state.budgets.length && state.view !== 'settings') newBudgetDialog();
     return;
   }
+  if (action === 'delete-budget') { void deleteBudget(); return; }
   if (action === 'run-report') {
     const report = REPORT_CHOICES.find((choice) => choice.id === button.dataset.report);
     if (!report) throw new Error(`Unknown report selection: ${button.dataset.report ?? ''}`);
@@ -1474,7 +1558,20 @@ document.addEventListener('click', (event: MouseEvent) => {
   if (action === 'edit-entry' && category) { const found = current()?.categories.find((c) => c.id === category)?.entries.find((e) => e.id === entry); if (found) entryDialog(category, 'expenses', found); }
   if (action === 'close') dialog.close();
   if (action === 'wizard-back' && wizard && wizard.step > 0) { wizard.step--; wizardView(); }
-  if (action === 'wizard-next' && wizard) { wizard.step++; persist(); wizardView(); }
+  if (action === 'wizard-next' && wizard) {
+    const form = dialog.querySelector<HTMLFormElement>('form[data-form="wizard-entry"]');
+    const hasPendingEntry = form && [...form.querySelectorAll<HTMLInputElement>('input[name="name"], input[name="planned"]')]
+      .some((input) => input.value.trim() !== '');
+    if (form && hasPendingEntry) {
+      if (!form.reportValidity()) return;
+      form.dataset.advanceAfterSubmit = 'true';
+      form.requestSubmit();
+    } else {
+      wizard.step++;
+      persist();
+      wizardView();
+    }
+  }
   if (action === 'delete-entry' && entry && window.confirm('Delete this budget entry? Its linked transactions will also be removed.')) {
     const budget = current();
     if (budget) {
@@ -1630,7 +1727,7 @@ dialog.addEventListener('change', (event: Event) => {
     const budget = current();
     const selectedCategory = budget?.categories.find((item) => item.id === target.value);
     const dueDateField = dialog.querySelector<HTMLElement>('#entry-due-date-field');
-    if (dueDateField) dueDateField.hidden = selectedCategory?.type !== 'subscriptions';
+    if (dueDateField) dueDateField.hidden = !supportsEntryDueDate(selectedCategory?.type);
   }
 });
 dialog.addEventListener('click', (event: MouseEvent) => { if (event.target === dialog) dialog.close(); });
@@ -1640,9 +1737,15 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
   const form = event.target;
   const data = new FormData(form);
   if (form.dataset.form === 'budget') {
-    const selectedTypes: BudgetGroupId[] = ['income', ...Array.from(form.querySelectorAll<HTMLInputElement>('input[name="groups"]:checked'), (input) => input.value as BudgetGroupId).filter((type) => type !== 'income')];
+    const selectedGroups = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="groups"]:checked'), (input) => {
+      const id = input.value as BudgetGroupId;
+      const predefined = GROUPS.find((group) => group.id === id);
+      return predefined ?? (input.dataset.groupName ? { id, name: input.dataset.groupName, color: 'teal' } : undefined);
+    }).filter((group): group is BudgetGroup => group !== undefined);
+    if (!selectedGroups.some((group) => group.id === 'income')) selectedGroups.unshift(GROUPS[0]);
+    const selectedTypes = selectedGroups.map((group) => group.id);
     const now = new Date(), month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const b = { id: uid(), seriesId: uid(), name: 'Budget', month, carryover: 0, selectedTypes, categories: defaultCategories(selectedTypes), transactions: [], incomeSchedules: [], expenseSchedules: [] };
+    const b = { id: uid(), seriesId: uid(), name: 'Budget', month, carryover: 0, selectedTypes, categories: defaultCategories(selectedGroups), transactions: [], incomeSchedules: [], expenseSchedules: [] };
     state.budgets = [b]; state.active = b.id; state.view = 'dashboard'; dashboardTab = 'overview'; wizard = { budgetId: b.id, groups: selectedTypes, step: 0 }; persist(); wizardView();
   } else if (form.dataset.form === 'month') {
     const source = state.budgets.find((item) => item.id === form.dataset.source);
@@ -1775,12 +1878,13 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
     if (!activeWizard) return;
     const b = state.budgets.find((item) => item.id === activeWizard.budgetId);
     const groupId = activeWizard.groups[activeWizard.step];
-    const g = GROUPS.find((item) => item.id === groupId);
+    const g = b ? groupsFor(b).find((item) => item.id === groupId) : undefined;
     if (!b || !g) return;
-    let c = b.categories.find((item) => item.type === g.id); if (!c) { c = { id: uid(), type: g.id, name: g.name, entries: [] }; b.categories.push(c); }
+    let c = b.categories.find((item) => item.type === g.id); if (!c) { c = { id: uid(), type: g.id, ...(g.id.startsWith('custom:') ? { typeName: g.name } : {}), name: g.name, entries: [] }; b.categories.push(c); }
     const name = String(data.get('name') ?? '').trim();
     const planned = Number(data.get('planned')) || 0;
     const nextPayday = String(data.get('nextPayday') ?? '').trim();
+    const dueDate = String(data.get('dueDate') ?? '').trim();
     if (g.id === 'income' && nextPayday) {
       const frequency = (String(data.get('frequency') || 'biweekly') as PayFrequency);
       const schedule: RecurringIncomeSchedule = { id: uid(), name, amount: planned, frequency, intervalDays: payFrequencyInterval(frequency), nextPayday };
@@ -1797,8 +1901,11 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
 
       c.entries.push({ id: uid(), name, planned: finalPlanned, actual: 0, scheduleId: schedule.id });
     } else {
-      c.entries.push({ id: uid(), name, planned, actual: 0 });
+      c.entries.push({ id: uid(), name, planned, actual: 0, ...(supportsEntryDueDate(g.id) && dueDate ? { dueDate } : {}) });
     }
+    const advanceAfterSubmit = form.dataset.advanceAfterSubmit === 'true';
+    delete form.dataset.advanceAfterSubmit;
+    if (advanceAfterSubmit) activeWizard.step++;
     persist(); wizardView();
   } else if (form.dataset.form === 'category') {
     const b = current(); if (!b) return;
@@ -1816,11 +1923,11 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
       if (!old) return;
       const existingEntry = old;
       const savedEntry = { ...existingEntry, ...values };
-      if (c.type === 'subscriptions' && dueDate && !savedEntry.scheduleId) savedEntry.dueDate = dueDate;
+      if (supportsEntryDueDate(c.type) && dueDate && !savedEntry.scheduleId) savedEntry.dueDate = dueDate;
       else delete savedEntry.dueDate;
       c.entries.push(savedEntry);
       b.transactions.forEach((transaction) => { if (transaction.entryId === existingEntry.id) transaction.categoryId = c.id; });
-    } else c.entries.push({ id: uid(), ...values, ...(c.type === 'subscriptions' && dueDate ? { dueDate } : {}) });
+    } else c.entries.push({ id: uid(), ...values, ...(supportsEntryDueDate(c.type) && dueDate ? { dueDate } : {}) });
     persist(); dialog.close(); render();
   }
 });
