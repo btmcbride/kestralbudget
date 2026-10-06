@@ -55,6 +55,10 @@ Kestral is for people who want a hands-on monthly budget, prefer to enter and ca
 
 Screenshots use fictional sample data. Select a preview to open its full-size image.
 
+### Dark and light themes
+
+[![Dark theme on the left and light theme on the right](docs/screenshots/themes-thumb.png)](docs/screenshots/themes.png)
+
 | Dashboard | Transactions |
 | :---: | :---: |
 | [![Open full-size dashboard screenshot](docs/screenshots/dashboard-thumb.png)](docs/screenshots/dashboard.png) | [![Open full-size transactions screenshot](docs/screenshots/transactions-thumb.png)](docs/screenshots/transactions.png) |
