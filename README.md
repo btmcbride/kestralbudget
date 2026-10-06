@@ -1,7 +1,6 @@
 # Kestral Budget
 
 ![GitHub release](https://img.shields.io/github/v/release/btmcbride/kestralbudget?display_name=tag)
-![Desktop builds](https://img.shields.io/github/actions/workflow/status/btmcbride/kestralbudget/desktop-builds.yml?label=desktop%20builds)
 
 Kestral Budget is a local-first monthly budgeting app. Create named budgets, plan income and spending, record transactions, and carry actual leftover money into later months.
 
