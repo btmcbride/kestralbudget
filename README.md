@@ -100,7 +100,12 @@ The production container builds the frontend and runs it with the API server.
 
 Use this checklist before publishing a new desktop release:
 
-1. Update the app version in `package.json` to the next release version.
+1. Bump the app's patch version in `package.json` (use `minor` or `major` instead of `patch` when appropriate):
+
+```powershell
+npm version patch --no-git-tag-version
+```
+
 2. Verify the app builds locally on your target platform.
 3. Build the Windows installer on Windows x64:
 
@@ -117,11 +122,20 @@ npm run desktop:dist:mac
 ```
 
 5. Commit the release changes and push them to `main`.
-6. Create and push a version tag:
+6. Create and push a version tag matching the version in `package.json` (for example, `v1.1.8`):
 
 ```powershell
-git tag v1.0.1
-git push origin v1.0.1
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+If you need to replace a tag that already exists, delete it locally and remotely before recreating it:
+
+```powershell
+git tag -d vX.Y.Z
+git push origin --delete vX.Y.Z
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 7. Watch the `Desktop Builds` workflow. The Windows and macOS jobs should complete successfully, then the tag-gated release job uploads the `.exe` and `.dmg` to the GitHub Release.
