@@ -22,6 +22,9 @@ const GROUPS: StandardBudgetGroup[] = [
 type StandardGroupId = 'income' | 'bills' | 'expenses' | 'subscriptions' | 'debts' | 'savings';
 type BudgetGroupId = StandardGroupId | `custom:${string}`;
 type PayFrequency = 'weekly' | 'biweekly' | 'monthly';
+type TransactionSortField = 'date' | 'type' | 'category' | 'description' | 'amount';
+type SortDirection = 'asc' | 'desc';
+type TransactionSortConfig = { field: TransactionSortField; direction: SortDirection };
 
 interface BudgetGroup {
   id: BudgetGroupId;
@@ -92,9 +95,13 @@ interface Budget {
   expenseSchedules: RecurringExpenseSchedule[];
 }
 
+type ThemePreference = 'system' | 'light' | 'dark';
 interface AppPreferences {
   defaultBudgetId: string | null;
   userName?: string | null;
+  transactionSortField?: TransactionSortField;
+  transactionSortDirection?: SortDirection;
+  theme?: ThemePreference;
 }
 
 interface AppState {
@@ -154,6 +161,7 @@ const uid = (): string => {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 };
 const defaultCategories = (types: BudgetGroupId[] = GROUPS.map((g) => g.id)): BudgetCategory[] => GROUPS.filter((g) => types.includes(g.id)).map((g) => ({ id: uid(), type: g.id, name: g.name, entries: [] }));
+const DEFAULT_TRANSACTION_SORT: TransactionSortConfig = { field: 'date', direction: 'desc' };
 
 function normalizeState(budgets: Budget[], active: string | null | undefined, preferences: Partial<AppPreferences> = {}): AppState {
   const normalizedBudgets = budgets.filter((budget) => Array.isArray(budget.categories)).map((budget) => ({
@@ -193,6 +201,9 @@ function normalizeState(budgets: Budget[], active: string | null | undefined, pr
     preferences: {
       defaultBudgetId: defaultBudgetId ?? null,
       userName: typeof preferences.userName === 'string' ? preferences.userName : null,
+      transactionSortField: ['date', 'type', 'category', 'description', 'amount'].includes(String(preferences.transactionSortField)) ? preferences.transactionSortField as TransactionSortField : DEFAULT_TRANSACTION_SORT.field,
+      transactionSortDirection: preferences.transactionSortDirection === 'asc' ? 'asc' : DEFAULT_TRANSACTION_SORT.direction,
+      theme: preferences.theme === 'light' || preferences.theme === 'dark' ? preferences.theme : 'system',
     },
   };
 }
@@ -203,7 +214,7 @@ function load(): AppState {
   } catch { /* Start with a clean local workspace if stored data is invalid. */ }
   return normalizeState([], null);
 }
-const state: AppState = { budgets: [], active: null, view: 'home', preferences: { defaultBudgetId: null, userName: null } };
+const state: AppState = { budgets: [], active: null, view: 'home', preferences: { defaultBudgetId: null, userName: null, transactionSortField: DEFAULT_TRANSACTION_SORT.field, transactionSortDirection: DEFAULT_TRANSACTION_SORT.direction } };
 let wizard: WizardState | null = null;
 let guidedTourStep = 0;
 let guidedTourLayer: HTMLElement | null = null;
@@ -218,6 +229,37 @@ const esc = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, 
 const fmt = (value: number): string => money.format(Number(value) || 0);
 const group = (type: BudgetGroupId): BudgetGroup => GROUPS.find((item) => item.id === type) || { id: type, name: current()?.categories.find((category) => category.type === type)?.typeName || type.replace(/^custom:/, ''), color: 'teal' };
 const current = (): Budget | null => state.budgets.find((budget) => budget.id === state.active) || null;
+const transactionSortConfig = (): TransactionSortConfig => ({
+  field: state.preferences.transactionSortField ?? DEFAULT_TRANSACTION_SORT.field,
+  direction: state.preferences.transactionSortDirection ?? DEFAULT_TRANSACTION_SORT.direction,
+});
+const transactionSortLabel = (field: TransactionSortField): string => ({ date: 'Date', type: 'Type', category: 'Category', description: 'Description', amount: 'Amount' })[field];
+const transactionTypeName = (budget: Budget, transaction: BudgetTransaction): string => {
+  const category = budget.categories.find((item) => item.id === transaction.categoryId);
+  return category?.entries.find((entry) => entry.id === transaction.entryId)?.name ?? category?.name ?? 'Uncategorized';
+};
+const sortTransactions = (budget: Budget): BudgetTransaction[] => {
+  const { field, direction } = transactionSortConfig();
+  const factor = direction === 'asc' ? 1 : -1;
+  return [...budget.transactions].sort((left, right) => {
+    const leftCategory = budget.categories.find((item) => item.id === left.categoryId);
+    const rightCategory = budget.categories.find((item) => item.id === right.categoryId);
+    const leftType = transactionTypeName(budget, left);
+    const rightType = transactionTypeName(budget, right);
+    const leftCategoryName = leftCategory ? group(leftCategory.type).name : 'Uncategorized';
+    const rightCategoryName = rightCategory ? group(rightCategory.type).name : 'Uncategorized';
+    if (field === 'amount') return ((left.amount - right.amount) || right.date.localeCompare(left.date)) * factor;
+    if (field === 'type') return ((leftType.localeCompare(rightType) || left.date.localeCompare(right.date) || left.description.localeCompare(right.description)) * factor);
+    if (field === 'category') return ((leftCategoryName.localeCompare(rightCategoryName) || left.date.localeCompare(right.date) || left.description.localeCompare(right.description)) * factor);
+    if (field === 'description') return ((left.description.localeCompare(right.description) || left.date.localeCompare(right.date)) * factor);
+    return left.date.localeCompare(right.date) * factor || left.description.localeCompare(right.description);
+  });
+};
+const setTransactionSort = (field: TransactionSortField, direction: SortDirection = transactionSortConfig().direction): void => {
+  state.preferences = { ...state.preferences, transactionSortField: field, transactionSortDirection: direction };
+  persist();
+  render();
+};
 const seriesBudgets = (seriesId: string): Budget[] => state.budgets.filter((budget) => budget.seriesId === seriesId).sort((a, b) => a.month.localeCompare(b.month));
 const latestInSeries = (seriesId: string | undefined): Budget | null => seriesId ? seriesBudgets(seriesId).at(-1) || null : null;
 const groupsFor = (budget: Budget): BudgetGroup[] => {
@@ -279,7 +321,7 @@ async function initialize(): Promise<void> {
       const normalized = normalizeState(serverState.budgets, serverState.active, serverState.preferences);
       state.budgets = normalized.budgets;
       state.active = normalized.active;
-      state.preferences = normalized.preferences;
+      state.preferences = { ...normalized.preferences, transactionSortField: normalized.preferences.transactionSortField ?? DEFAULT_TRANSACTION_SORT.field, transactionSortDirection: normalized.preferences.transactionSortDirection ?? DEFAULT_TRANSACTION_SORT.direction };
       const legacyName = localStorage.getItem('kestral-user-name');
       if (!state.preferences.userName && legacyName) {
         state.preferences.userName = legacyName.slice(0, 40);
@@ -289,7 +331,7 @@ async function initialize(): Promise<void> {
       const legacyState = load();
       state.budgets = legacyState.budgets;
       state.active = legacyState.active;
-      state.preferences = legacyState.preferences;
+      state.preferences = { ...legacyState.preferences, transactionSortField: legacyState.preferences.transactionSortField ?? DEFAULT_TRANSACTION_SORT.field, transactionSortDirection: legacyState.preferences.transactionSortDirection ?? DEFAULT_TRANSACTION_SORT.direction };
       const legacyName = localStorage.getItem('kestral-user-name');
       if (!state.preferences.userName && legacyName) state.preferences.userName = legacyName.slice(0, 40);
       await putState(state.budgets, state.active, state.preferences);
@@ -357,7 +399,15 @@ function requiredElement<T extends Element>(parent: ParentNode, selector: string
   return element;
 }
 
+const themeQuery = window.matchMedia('(prefers-color-scheme: light)');
+function applyTheme(): void {
+  const choice = state.preferences.theme ?? 'system';
+  document.documentElement.dataset.theme = choice === 'system' ? (themeQuery.matches ? 'light' : 'dark') : choice;
+}
+themeQuery.addEventListener('change', applyTheme);
+
 function render(): void {
+  applyTheme();
   const budget = current();
   const currentTransactionIds = new Set(budget?.transactions.map((transaction) => transaction.id) ?? []);
   for (const id of selectedTransactionIds) if (!currentTransactionIds.has(id)) selectedTransactionIds.delete(id);
@@ -372,7 +422,7 @@ function render(): void {
     <nav class="budget-nav" aria-label="Your budgets">${series.length ? series.map((b) => `<button class="budget-nav-item ${b.seriesId === budget?.seriesId && state.view === 'budget' ? 'active' : ''}" data-action="select-series" data-id="${esc(b.seriesId)}"><span class="nav-month-icon">${seriesBudgets(b.seriesId).length}</span><span class="nav-budget-copy"><strong>${esc(b.name)}</strong><small>${seriesBudgets(b.seriesId).length} ${seriesBudgets(b.seriesId).length === 1 ? 'month' : 'months'}</small></span>${b.seriesId === state.preferences.defaultBudgetId ? '<span class="default-budget-marker" role="img" aria-label="Default budget" title="Default budget">★</span>' : ''}</button>`).join('') : '<p class="nav-empty">Your budgets<br>will show up here.</p>'}</nav>
     <div class="backup-actions"><button type="button" data-action="export-backup">Export backup</button><button type="button" data-action="import-backup">Restore backup</button><input id="backup-file" type="file" accept="application/json,.json" hidden></div>
     <div class="sidebar-bottom"><span class="saved-dot"></span><span>Stored in app database</span><span id="save-status">All changes saved</span></div></aside>
-    <main class="main-area"><header class="topbar"><div class="breadcrumb"><span><strong>${greeting()}</strong></span><span class="crumb-divider">/</span></div><div class="topbar-actions"><button class="icon-button tour-button" data-action="new-transaction" title="Quick Add transaction"><span class="tour-cap" aria-hidden="true">$</span><span>Quick Transaction</span></button></div></header>${budget ? dashboard(budget, seriesBudgets(budget.seriesId)) : welcome()}</main></div>`;
+    <main class="main-area"><header class="topbar"><div class="breadcrumb"><span><strong>${greeting()}</strong></span><span class="crumb-divider">/</span></div><div class="topbar-actions"><label class="theme-picker"><span aria-hidden="true">◐</span><select id="theme-select" aria-label="Theme" title="Theme">${([['system', 'System'], ['light', 'Light'], ['dark', 'Dark']] as [ThemePreference, string][]).map(([value, label]) => `<option value="${value}" ${(state.preferences.theme ?? 'system') === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="icon-button tour-button" data-action="new-transaction" title="Quick Add transaction"><span class="tour-cap" aria-hidden="true">$</span><span>Quick Transaction</span></button></div></header>${budget ? dashboard(budget, seriesBudgets(budget.seriesId)) : welcome()}</main></div>`;
   const topbar = requiredElement<HTMLElement>(root, '.topbar');
   const topbarActions = requiredElement<HTMLElement>(topbar, '.topbar-actions');
   if (state.budgets.length) {
@@ -503,11 +553,13 @@ function dashboard(b: Budget, budgets: Budget[]): string {
   });
   const top = [...topEntries, ...topTransactions].filter((entry) => entry.actual > 0).sort((a, z) => z.actual - a.actual).slice(0, 20);
   if (transactionCategoryFilter !== 'all' && !b.categories.some((category) => category.id === transactionCategoryFilter)) transactionCategoryFilter = 'all';
-  const transactionRows = [...b.transactions].sort((a, z) => z.date.localeCompare(a.date)).map((transaction) => {
+  const transactionRows = sortTransactions(b).map((transaction) => {
     const category = b.categories.find((item) => item.id === transaction.categoryId);
+    const typeName = transactionTypeName(b, transaction);
+    const categoryName = category ? group(category.type).name : 'Uncategorized';
     const isIncome = category?.type === 'income';
-    const searchText = [transaction.description, category?.name ?? 'Uncategorized', transaction.date, displayDate(transaction.date)].join(' ').toLocaleLowerCase();
-    return `<tr data-transaction-row data-transaction-id="${esc(transaction.id)}" data-category-id="${esc(transaction.categoryId)}" data-search="${esc(searchText)}"><td><input class="transaction-select" type="checkbox" data-transaction-check="${esc(transaction.id)}" aria-label="Select ${esc(transaction.description)}" ${selectedTransactionIds.has(transaction.id) ? 'checked' : ''}></td><td>${esc(displayDate(transaction.date))}</td><td>${esc(transaction.description)}</td><td>${esc(category?.name ?? 'Uncategorized')}</td><td class="${isIncome ? 'positive' : 'negative'}">${isIncome ? '+' : '−'}${fmt(transaction.amount)}</td><td class="transaction-actions"><button class="text-action" data-action="edit-transaction" data-transaction="${esc(transaction.id)}">Edit</button><button class="text-action transaction-delete" data-action="delete-transaction" data-transaction="${esc(transaction.id)}">Delete</button></td></tr>`;
+    const searchText = [transaction.description, categoryName, typeName, transaction.date, displayDate(transaction.date)].join(' ').toLocaleLowerCase();
+    return `<tr data-transaction-row data-transaction-id="${esc(transaction.id)}" data-category-id="${esc(transaction.categoryId)}" data-search="${esc(searchText)}" data-type-name="${esc(typeName)}" data-category-name="${esc(categoryName)}" data-amount="${esc(transaction.amount)}"><td><input class="transaction-select" type="checkbox" data-transaction-check="${esc(transaction.id)}" aria-label="Select ${esc(transaction.description)}" ${selectedTransactionIds.has(transaction.id) ? 'checked' : ''}></td><td>${esc(displayDate(transaction.date))}</td><td>${esc(transaction.description)}</td><td>${esc(categoryName)}</td><td>${esc(typeName)}</td><td class="${isIncome ? 'positive' : 'negative'}">${isIncome ? '+' : '−'}${fmt(transaction.amount)}</td><td class="transaction-actions"><button class="text-action" data-action="edit-transaction" data-transaction="${esc(transaction.id)}">Edit</button><button class="text-action transaction-delete" data-action="delete-transaction" data-transaction="${esc(transaction.id)}">Delete</button></td></tr>`;
   }).join('');
   return `<section class="dashboard"><div class="budget-tabs" role="tablist" aria-label="Choose a month">${budgets.map((item) => `<button class="month-tab ${item.id === b.id ? 'selected' : ''}" data-action="select-month" data-id="${esc(item.id)}" role="tab" aria-selected="${item.id === b.id}">${esc(monthText(item.month))}</button>`).join('')}<button class="month-add" data-action="new-month" aria-label="Create a new month" title="Create a new month">+</button></div>
     <div class="page-heading"><div><p class="overline">MONTHLY OVERVIEW <span class="heading-separator">/</span> ${esc(monthText(b.month).toUpperCase())}</p><h1>${esc(b.name)}</h1><p class="heading-subtitle">Your plan, actuals, and what remains this month.</p></div><div class="heading-actions"><details class="budget-menu"><summary class="icon-button" aria-label="Budget actions" title="Budget actions">⋯</summary><div class="budget-menu-panel"><button type="button" data-action="set-default-budget" data-id="${esc(b.seriesId)}">${b.seriesId === state.preferences.defaultBudgetId ? 'Use this as default' : 'Set as default budget'}</button><button type="button" data-action="delete-month">Delete this month</button><button class="is-danger" type="button" data-action="delete-budget">Delete entire budget</button></div></details></div></div>
@@ -522,7 +574,7 @@ function dashboard(b: Budget, budgets: Budget[]): string {
       <div class="summary-income"><span><i class="type-dot green"></i>Income</span><strong>${fmt(income.planned)}</strong><span>${fmt(income.actual)}</span><span class="${income.actual >= income.planned ? 'positive' : 'negative'}">${signed(income.actual - income.planned)}</span></div>${t.carryover ? `<div class="summary-income carryover-row"><span><i class="type-dot teal"></i>Opening carryover</span><strong>${fmt(t.carryover)}</strong><span>${fmt(t.carryover)}</span><span>From prior month</span></div>` : ''}<div class="table-scroll"><table><thead><tr><th>TYPE</th><th>PLANNED</th><th>ACTUAL</th><th>DIFF</th></tr></thead><tbody>${typeRows}</tbody></table></div><div class="table-legend"><span>Planned vs actual amounts</span><span>Diff = actual − planned</span></div></section>
       <section class="panel"><div class="panel-heading"><div><p class="panel-kicker">WHERE IT WENT</p><h2>Top spending</h2></div><span class="count-badge">${top.length} / 20</span></div>${top.length ? `<ol class="top-list">${top.map((entry, index) => `<li><span class="rank">${String(index + 1).padStart(2, '0')}</span><span class="top-copy"><strong>${esc(entry.name)}</strong><small>${esc(entry.category)} · ${group(entry.type).name}</small></span><span class="top-amount">${fmt(entry.actual)}</span></li>`).join('')}</ol>` : '<div class="quiet-empty">Actual spending will appear here as you record it.</div>'}</section></div>
     <section class="categories-section" ${dashboardTab === 'transactions' ? 'hidden' : ''}><div class="section-title-row"><div><p class="panel-kicker">YOUR PLAN</p><h2>Budget categories</h2></div><button class="button button-secondary" data-action="add-category">＋ Add category</button></div><div class="category-grid">${groups.map((g) => categoryCard(g, b)).join('')}</div></section>
-    <section class="transactions-panel panel" ${dashboardTab === 'overview' ? 'hidden' : ''}><div class="panel-heading"><div><p class="panel-kicker">RECORDED ACTIVITY</p><h2>Transactions</h2></div><div class="panel-heading-actions"><span class="count-badge">${b.transactions.length}</span><button class="button button-primary" data-action="new-transaction"><span>+</span> Add transaction</button></div></div><div class="transaction-tools"><label class="transaction-filter">Search<input id="transaction-search" type="search" value="${esc(transactionSearch)}" placeholder="Description, category, or date"></label><label class="transaction-filter">Category<select id="transaction-category-filter"><option value="all">All categories</option>${b.categories.map((category) => `<option value="${esc(category.id)}" ${transactionCategoryFilter === category.id ? 'selected' : ''}>${esc(category.name)}</option>`).join('')}</select></label><div class="transaction-bulk"><span id="transaction-selection-count" aria-live="polite">0 selected</span><button class="button button-secondary" type="button" data-action="select-visible">Select visible</button><button class="button button-secondary" type="button" data-action="clear-selection" disabled>Clear selection</button><button class="button button-danger" type="button" data-action="delete-selected" disabled>Delete selected</button></div></div>${b.transactions.length ? `<div class="table-scroll"><table><thead><tr><th><span class="visually-hidden">Select</span></th><th>DATE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>AMOUNT</th><th></th></tr></thead><tbody>${transactionRows}</tbody></table></div><p id="transaction-no-results" class="transaction-no-results" hidden>No transactions match these filters.</p>` : '<div class="quiet-empty">No transactions recorded this month.</div>'}</section></section>`;
+    <section class="transactions-panel panel" ${dashboardTab === 'overview' ? 'hidden' : ''}><div class="panel-heading"><div><p class="panel-kicker">RECORDED ACTIVITY</p><h2>Transactions</h2></div><div class="panel-heading-actions"><span class="count-badge">${b.transactions.length}</span><button class="button button-primary" data-action="new-transaction"><span>+</span> Add transaction</button></div></div><div class="transaction-tools"><label class="transaction-filter">Search<input id="transaction-search" type="search" value="${esc(transactionSearch)}" placeholder="Description, type, category, or date"></label><label class="transaction-filter">Category<select id="transaction-category-filter"><option value="all">All categories</option>${b.categories.map((category) => `<option value="${esc(category.id)}" ${transactionCategoryFilter === category.id ? 'selected' : ''}>${esc(category.name)}</option>`).join('')}</select></label><label class="transaction-filter">Sort by<select id="transaction-sort-field">${(['date', 'description', 'type', 'category', 'amount'] as TransactionSortField[]).map((field) => `<option value="${field}" ${transactionSortConfig().field === field ? 'selected' : ''}>${transactionSortLabel(field)}</option>`).join('')}</select></label><div class="transaction-filter transaction-direction"><span>Direction</span><button class="button button-secondary" type="button" data-action="toggle-transaction-sort-direction">${transactionSortConfig().direction === 'asc' ? 'Ascending' : 'Descending'}</button></div><div class="transaction-bulk"><span id="transaction-selection-count" aria-live="polite">0 selected</span><button class="button button-secondary" type="button" data-action="select-visible">Select visible</button><button class="button button-secondary" type="button" data-action="clear-selection" disabled>Clear selection</button><button class="button button-danger" type="button" data-action="delete-selected" disabled>Delete selected</button></div></div>${b.transactions.length ? `<div class="table-scroll"><table><thead><tr><th><span class="visually-hidden">Select</span></th><th>DATE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>TYPE</th><th>AMOUNT</th><th></th></tr></thead><tbody>${transactionRows}</tbody></table></div><p id="transaction-no-results" class="transaction-no-results" hidden>No transactions match these filters.</p>` : '<div class="quiet-empty">No transactions recorded this month.</div>'}</section></section>`;
 }
 
 function applyTransactionFilters(): void {
@@ -562,12 +614,12 @@ function categoryCard(g: BudgetGroup, budget: Budget): string {
   const differenceClass = g.id === 'income'
     ? actual < planned ? 'negative' : actual > planned ? 'positive' : ''
     : actual > planned ? 'negative' : actual < planned ? 'positive' : '';
-  const symbols: Record<string, string> = { income: '↗', bills: '▤', expenses: '◉', subscriptions: '⟳', debts: '↘', savings: '⌑' };
-  const symbol = symbols[g.id] || '◈';
-  return `<section class="category-card"><header class="category-header"><span class="category-symbol ${g.color}">${symbol}</span><div class="category-heading"><h3>${g.name}</h3><span>${entries.length} ${entries.length === 1 ? 'item' : 'items'}</span></div><div class="category-total"><strong>${fmt(planned)}</strong><small>planned</small></div><button class="icon-button add-small" data-action="add-entry" data-type="${g.id}" data-category="${cats[0]?.id || ''}" aria-label="Add ${g.name} entry">+</button></header><div class="category-progress"><span class="${actual > planned && g.id !== 'income' ? 'over-budget' : ''}" style="width:${planned ? Math.min(100, actual / planned * 100) : (actual ? 100 : 0)}%"></span></div>
-    ${cats.length ? cats.map((c) => `<div class="sub-category"><div class="sub-category-title"><span>${esc(c.name)}</span><span class="sub-category-actions"><button class="text-action" data-action="add-entry" data-category="${esc(c.id)}">Add item</button>${g.id === 'income' ? '' : `<button class="text-action" data-action="add-expense-schedule" data-category="${esc(c.id)}">Schedule item</button>`}</span></div>${c.entries.length ? c.entries.map((e) => { const actualForEntry = entryActual(budget, e); const incomeSchedule = budget.incomeSchedules.find((item) => item.id === e.scheduleId); const expenseSchedule = budget.expenseSchedules.find((item) => item.id === e.scheduleId); const scheduleLabel = expenseSchedule ? `${PAY_FREQUENCIES.find((item) => item.value === expenseSchedule.frequency)?.label ?? 'Recurring'} · ${displayDate(e.scheduledDate ?? expenseSchedule.nextDueDate)}` : ''; return `<button class="entry-row" data-action="edit-entry" data-category="${esc(c.id)}" data-entry="${esc(e.id)}"><span class="entry-name">${esc(e.name)}${scheduleLabel ? `<small class="entry-schedule">${esc(scheduleLabel)}</small>` : ''}</span><span class="entry-planned">${fmt(e.planned)}</span><span class="entry-actual ${actualForEntry > +e.planned && g.id !== 'income' ? 'negative' : ''}">${fmt(actualForEntry)}</span></button>`; }).join('') : '<p class="category-empty">Nothing added yet</p>'}</div>`).join('') : `<div class="first-category"><span>No ${g.name.toLowerCase()} categories yet</span><button class="text-action" data-action="add-category" data-type="${g.id}">Create one</button></div>`}
-    <footer class="category-footer"><span>Actual ${fmt(actual)}</span><span class="${differenceClass}">${signed(actual - planned)} diff</span></footer></section>`;
+  const symbols: Record<string, string> = { income: '↗', bills: '▤', expenses: '◔', subscriptions: '↻', debts: '◧', savings: '◈' };
+  const symbol = symbols[g.id] || '●';
+  const body = `${cats.length ? cats.map((c) => `<div class="sub-category"><div class="sub-category-title"><span>${esc(c.name)}</span><span class="sub-category-actions"><button class="text-action" data-action="add-entry" data-category="${esc(c.id)}">Add item</button>${g.id === 'income' ? '' : `<button class="text-action" data-action="add-expense-schedule" data-category="${esc(c.id)}">Schedule item</button>`}</span></div>${c.entries.length ? c.entries.map((e) => { const actualForEntry = entryActual(budget, e); const expenseSchedule = budget.expenseSchedules.find((item) => item.id === e.scheduleId); const scheduleLabel = expenseSchedule ? `${PAY_FREQUENCIES.find((item) => item.value === expenseSchedule.frequency)?.label ?? 'Recurring'} · ${displayDate(e.scheduledDate ?? expenseSchedule.nextDueDate)}` : ''; return `<button class="entry-row" data-action="edit-entry" data-category="${esc(c.id)}" data-entry="${esc(e.id)}"><span class="entry-name">${esc(e.name)}${scheduleLabel ? `<small class="entry-schedule">${esc(scheduleLabel)}</small>` : ''}</span><span class="entry-planned">${fmt(e.planned)}</span><span class="entry-actual ${actualForEntry > +e.planned && g.id !== 'income' ? 'negative' : ''}">${fmt(actualForEntry)}</span></button>`; }).join('') : '<p class="category-empty">Nothing added yet</p>'}</div>`).join('') : `<div class="first-category"><span>No ${g.name.toLowerCase()} categories yet</span><button class="text-action" data-action="add-category" data-type="${esc(g.id)}">Create one</button></div>`}`;
+  return `<section class="category-card"><header class="category-header"><span class="category-symbol ${g.color}">${symbol}</span><div class="category-heading"><h3>${g.name}</h3><span>${entries.length} ${entries.length === 1 ? 'item' : 'items'}</span></div><div class="category-total"><strong>${fmt(planned)}</strong><small>planned</small></div><div class="category-actions"><button class="icon-button add-small" data-action="add-entry" data-type="${esc(g.id)}" data-category="${esc(cats[0]?.id || '')}" aria-label="Add ${esc(g.name)} entry">+</button></div></header><div class="category-progress"><span class="${actual > planned && g.id !== 'income' ? 'over-budget' : ''}" style="width:${planned ? Math.min(100, actual / planned * 100) : (actual ? 100 : 0)}%"></span></div>${body}<footer class="category-footer"><span>Actual ${fmt(actual)}</span><span class="${differenceClass}">${signed(actual - planned)} diff</span></footer></section>`;
 }
+
 function open(content: string): void { dialog.innerHTML = content; if (!dialog.open) dialog.showModal(); }
 function onboardingDialog(): void {
   open(`<form class="dialog-form" data-form="onboarding">
@@ -824,6 +876,11 @@ document.addEventListener('click', (event: MouseEvent) => {
   if (action === 'budget-view' && (button.dataset.view === 'overview' || button.dataset.view === 'transactions')) { dashboardTab = button.dataset.view; render(); }
   if (action === 'new-budget') newBudgetDialog();
   if (action === 'new-month') newMonthDialog();
+  if (action === 'toggle-transaction-sort-direction') {
+    const sort = transactionSortConfig();
+    setTransactionSort(sort.field, sort.direction === 'asc' ? 'desc' : 'asc');
+    return;
+  }
   if (action === 'select-visible') {
     for (const row of root.querySelectorAll<HTMLTableRowElement>('[data-transaction-row]:not([hidden])')) {
       const id = row.dataset.transactionId;
@@ -854,6 +911,11 @@ document.addEventListener('click', (event: MouseEvent) => {
   if (action === 'delete-month') deleteCurrentMonth();
   if (action === 'delete-budget') deleteCurrentBudget();
   if (action === 'new-transaction') transactionDialog();
+  if (action === 'toggle-transaction-sort-direction') {
+    const sort = transactionSortConfig();
+    setTransactionSort(sort.field, sort.direction === 'asc' ? 'desc' : 'asc');
+    return;
+  }
   if (action === 'edit-transaction' && transaction) {
     const found = current()?.transactions.find((item) => item.id === transaction);
     if (found) transactionDialog(found);
@@ -929,6 +991,17 @@ document.addEventListener('change', (event: Event) => {
     selectedTransactionIds.clear();
     root.querySelectorAll<HTMLInputElement>('.transaction-select').forEach((checkbox) => { checkbox.checked = false; });
     applyTransactionFilters();
+    return;
+  }
+  if (target instanceof HTMLSelectElement && target.id === 'theme-select') {
+    state.preferences = { ...state.preferences, theme: target.value as ThemePreference };
+    persist();
+    applyTheme();
+    return;
+  }
+  if (target instanceof HTMLSelectElement && target.id === 'transaction-sort-field') {
+    setTransactionSort(target.value as TransactionSortField);
+    return;
   }
 });
 document.addEventListener('change', (event: Event) => {

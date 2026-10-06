@@ -63,8 +63,11 @@ async function handleApi(request, response, pathname, storage) {
       ? {
         defaultBudgetId: payload.preferences.defaultBudgetId === null || typeof payload.preferences.defaultBudgetId === 'string' ? payload.preferences.defaultBudgetId : null,
         userName: payload.preferences.userName === null || typeof payload.preferences.userName === 'string' ? payload.preferences.userName : null,
+        transactionSortField: ['date', 'type', 'category', 'description', 'amount'].includes(payload.preferences.transactionSortField) ? payload.preferences.transactionSortField : 'date',
+        transactionSortDirection: payload.preferences.transactionSortDirection === 'asc' ? 'asc' : 'desc',
+        theme: ['system', 'light', 'dark'].includes(payload.preferences.theme) ? payload.preferences.theme : 'system',
       }
-      : { defaultBudgetId: null, userName: null };
+      : { defaultBudgetId: null, userName: null, transactionSortField: 'date', transactionSortDirection: 'desc' };
     storage.writeState(JSON.stringify({ budgets: payload.budgets, active: payload.active, preferences }));
     sendJson(response, 200, { saved: true });
     return;

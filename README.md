@@ -151,6 +151,12 @@ npm run desktop:dist
 
 The Windows installer is written to `release/windows/`. On macOS, run `npm run desktop:dist:mac` to build an Apple Silicon DMG in `release/mac/`. Installed users do not need Node.js or Podman. The desktop app stores its SQLite database in Electron's per-user `userData` directory and runs its API on loopback only. It uses the WebAssembly SQLite adapter, so no native compiler or Electron-specific SQLite rebuild is needed.
 
+If macOS says the app is damaged after you open the DMG, clear the quarantine flag and try again:
+
+```bash
+xattr -cr "/Applications/Kestral Budget.app"
+```
+
 The `Desktop Builds` GitHub Actions workflow builds both installers on every push and uploads separate Windows and Mac artifacts. Pushing a `v*` tag also publishes a GitHub Release with the `.exe` and `.dmg`. The Mac build is unsigned; sign and notarize it with Apple Developer credentials before distributing it broadly.
 
 The desktop and container editions use separate databases. Export a backup from one edition and import it into the other to transfer data. Windows installers are unsigned unless a code-signing certificate is configured, so Windows may show a publisher warning.

@@ -66,7 +66,9 @@ function isBudgetState(value) {
       isRecord(value.preferences)
       && (value.preferences.defaultBudgetId === undefined || value.preferences.defaultBudgetId === null || typeof value.preferences.defaultBudgetId === 'string')
       && (value.preferences.userName === undefined || value.preferences.userName === null || typeof value.preferences.userName === 'string')
-    ));
+      && (value.preferences.transactionSortField === undefined || ['date', 'type', 'category', 'description', 'amount'].includes(value.preferences.transactionSortField))
+      && (value.preferences.transactionSortDirection === undefined || value.preferences.transactionSortDirection === 'asc' || value.preferences.transactionSortDirection === 'desc')
+            && (value.preferences.theme === undefined || ['system', 'light', 'dark'].includes(value.preferences.theme))    ));
 }
 
 export function createBackup(state, createdAt = new Date().toISOString()) {
@@ -77,7 +79,7 @@ export function createBackup(state, createdAt = new Date().toISOString()) {
     createdAt,
     budgets: state.budgets,
     active: state.active,
-    preferences: state.preferences ?? { defaultBudgetId: null, userName: null },
+    preferences: state.preferences ?? { defaultBudgetId: null, userName: null, transactionSortField: 'date', transactionSortDirection: 'desc' },
   }, null, 2);
 }
 
@@ -89,6 +91,6 @@ export function parseBackup(contents) {
   return {
     budgets: backup.budgets,
     active: backup.active,
-    preferences: backup.preferences ?? { defaultBudgetId: null, userName: null },
+    preferences: backup.preferences ?? { defaultBudgetId: null, userName: null, transactionSortField: 'date', transactionSortDirection: 'desc' },
   };
 }
