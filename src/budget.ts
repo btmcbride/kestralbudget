@@ -689,8 +689,12 @@ async function importBackup(file: File): Promise<void> {
     root.inert = false;
   }
 }
-function monthTabs(budget: Budget, budgets: Budget[]): string {
-  return `<div class="budget-tabs" role="tablist" aria-label="Choose a month">${budgets.map((item) => `<button class="month-tab ${item.id === budget.id ? 'selected' : ''}" data-action="select-month" data-id="${esc(item.id)}" role="tab" aria-selected="${item.id === budget.id}">${esc(monthText(item.month))}</button>`).join('')}<button class="month-add" data-action="new-month" aria-label="Create a new month" title="Create a new month">+</button></div>`;
+function monthTabs(budget: Budget, budgets: Budget[], actions?: string): string {
+  const tabs = budgets.map((item) => `<button class="month-tab ${item.id === budget.id ? 'selected' : ''}" data-action="select-month" data-id="${esc(item.id)}" role="tab" aria-selected="${item.id === budget.id}">${esc(monthText(item.month))}</button>`).join('');
+  const addMonth = '<button class="month-add" data-action="new-month" aria-label="Create a new month" title="Create a new month">+</button>';
+  return actions === undefined
+    ? `<div class="budget-tabs" role="tablist" aria-label="Choose a month">${tabs}${addMonth}</div>`
+    : `<div class="month-toolbar"><div class="budget-tabs" role="tablist" aria-label="Choose a month">${tabs}</div>${addMonth}${actions}</div>`;
 }
 
 function dashboard(b: Budget, budgets: Budget[]): string {
@@ -755,8 +759,8 @@ function dashboard(b: Budget, budgets: Budget[]): string {
     `<article class="metric-card"><div class="metric-label"><span class="metric-icon">${icon}</span>${title.toUpperCase()}</div><div class="metric-value ${amountClass}">${fmt(amount)}</div><div class="metric-foot">${details}</div></article>`;
   const plannedAvailableIncome = summary.income.planned + summary.carryover;
   const isTransactionsPage = state.view === 'transactions';
-  return `<section class="dashboard">${monthTabs(b, budgets)}
-    <div class="page-heading"><span>${esc(monthText(b.month))}</span><div class="heading-actions">${isTransactionsPage ? '' : '<button class="button button-primary" type="button" data-action="new-transaction"><span>+</span>Quick Transaction</button>'}<details class="budget-menu"><summary class="button button-secondary budget-menu-trigger" aria-label="More options" title="More options">⋯</summary><div class="budget-menu-panel"><button type="button" data-action="delete-month">Delete this month</button></div></details></div></div>
+  const monthActions = `<div class="heading-actions">${isTransactionsPage ? '' : '<button class="button button-primary" type="button" data-action="new-transaction"><span>+</span>Quick Transaction</button>'}<details class="budget-menu"><summary class="button button-secondary budget-menu-trigger" aria-label="More options" title="More options">⋯</summary><div class="budget-menu-panel"><button type="button" data-action="delete-month">Delete this month</button></div></details></div>`;
+  return `<section class="dashboard">${monthTabs(b, budgets, monthActions)}
     <section class="metric-grid" aria-label="Income allocation summary" ${isTransactionsPage ? 'hidden' : ''}>
       ${metricCard('Income + Carryover', '↗', plannedAvailableIncome, `<span>Planned income ${fmt(summary.income.planned)}</span><span>Carryover ${fmt(summary.carryover)}</span>`)}
       ${metricCard('Unallocated Income', '◷', summary.plannedLeft, '<span>Available income not yet allocated</span>', summary.plannedLeft < 0 ? 'negative' : 'positive')}

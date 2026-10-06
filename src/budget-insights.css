@@ -11,6 +11,30 @@
   justify-content: flex-end;
 }
 
+.month-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.month-toolbar .budget-tabs {
+  min-width: 0;
+  flex: 0 1 auto;
+  border-bottom: 0;
+}
+
+.month-toolbar .month-add {
+  flex: 0 0 33px;
+}
+
+.month-toolbar .heading-actions {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .budget-tool-button,
 .budget-menu-trigger {
   min-height: 36px;
@@ -859,6 +883,22 @@
 }
 
 @media (max-width: 720px) {
+  .month-toolbar {
+    flex-wrap: wrap;
+    gap: 0 8px;
+    margin-bottom: 18px;
+    padding-bottom: 8px;
+  }
+
+  .month-toolbar .budget-tabs {
+    flex: 0 1 auto;
+  }
+
+  .month-toolbar .heading-actions {
+    flex: 1 0 100%;
+    padding-top: 8px;
+  }
+
   .report-choice-card {
     grid-template-columns: 30px minmax(0, 1fr);
     gap: 12px;
