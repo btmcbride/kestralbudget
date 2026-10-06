@@ -2,65 +2,69 @@
 
 ![GitHub release](https://img.shields.io/github/v/release/btmcbride/kestralbudget?display_name=tag)
 
-Kestral Budget is a local-first monthly budgeting app. Create named budgets, plan income and spending, record transactions, and carry actual leftover money into later months.
+Kestral Budget is a local-first monthly budgeting app. Plan income and spending in one budget, record transactions, and carry actual leftover money into later months.
 
 ## How the app is organized
 
-- **Budget:** A named budget is a series of monthly budgets. Separate budgets keep their categories, months, transactions, and carryovers independent.
-- **Month:** Each month has planned amounts, actuals, and transactions. Month tabs show the months belonging to the selected budget.
+- **Budget:** The app has one budget, organized into monthly plans.
+- **Month:** Each month has planned amounts, actuals, and transactions. Month tabs switch between months in the budget.
 - **Category:** A category belongs to a standard spending type or a custom type. Examples include Rent under Bills or Pet care as a custom type.
 - **Budget item:** An item is a planned line within a category, such as a paycheck, rent, or groceries. It has planned and manually entered actual amounts.
 - **Transaction:** A dated record of actual income or spending. It belongs to a category and can optionally be linked to one of that category's budget items.
 
 ## Main workflows
 
-### Create a budget
+### Set up the budget
 
-Choose **New budget**, enter a name, and select the standard sections to include. Income is always included; Bills, Expenses, Subscriptions, Debts, and Savings are optional. The setup wizard visits each selected section in order and lets you add budget items with planned amounts. You can skip a section's items and add them later.
+Choose **Create your first budget** and select the sections to include. Income is always included; Bills, Expenses, Subscriptions, Debts, and Savings are optional. The setup wizard visits each selected section in order and lets you add budget items with planned amounts. You can skip a section's items and add them later.
 
 For recurring income, choose a weekly, biweekly, or monthly frequency and enter the next payday. The app generates a planned income item for each scheduled payday in each month. One-off or irregular income can still be entered manually.
 
-Custom categories and custom spending types can be added from the Overview after setup. When setup finishes, you can start an optional guided tour; use the graduation-cap **App tour** button in the top bar to replay it later. The tour highlights the main sections and explains how to update the plan.
+Use the left sidebar to navigate to **Dashboard**, **Transactions**, **Subscription Tracking**, **Monthly Review**, or **Reports**. Open **Settings** at the bottom of the sidebar to customize the theme, accent color, text size, and layout density, and to choose currency, date format, calendar week start, and month carryover preferences. Reports is a placeholder for a future update. Export and import options remain in the sidebar.
 
-Use the budget actions menu to set a budget as the default. Its star appears beside the budget name in the sidebar.
+Custom categories can be added from the Dashboard after setup. When setup finishes, you can start an optional guided tour; use the graduation-cap **App tour** button in the top bar to replay it later.
 
-### Use Overview and Transactions
+### Dashboard and Transactions
 
-The selected month has two views:
+- **Dashboard** starts with planned income plus carryover, unallocated planned income, and planned allocations. The **At a glance** pane contains collapsible Income and Categories summaries with planned, actual, and difference details; **Top spending** remains in its own pane alongside it. Budget categories and items appear below.
+- **Transactions** shows the selected month's dated ledger. Use **Add transaction** to enter a date, description, amount, and category. You can optionally assign it to a budget item in that category. Search by description, budget item, category, or date, filter by budget item or category (or both), and select visible transactions for bulk deletion. Transactions can be edited, duplicated, or deleted individually.
 
-- **Overview** shows income, allocated amounts, planned and actual leftover, planned-versus-actual differences, the top 20 actual spending items, and budget categories.
-- **Transactions** shows that month's dated transaction ledger. Use **Add transaction** to enter a date, description, amount, and category. You can optionally assign it to a budget item in that category. Search by description, budget item, category, or date, filter by budget item or category (or both), and select visible transactions for bulk deletion. Transactions can be edited, duplicated, or deleted individually.
+### Subscription Tracking and Monthly Review
+
+**Subscription Tracking** displays subscription due dates and recurring scheduled items on a calendar for the selected month. Add subscriptions with an optional reminder date or a recurring schedule.
+
+**Monthly Review** compares recorded income and spending to the selected month's plan, including over- and under-plan categories.
 
 The category determines how a transaction is counted: transactions under Income add to actual income; transactions under other categories add to actual spending. A transaction linked to a budget item also appears in that item's actual amount. Category-only transactions still affect category totals and leftover, but are not assigned to a specific item.
 
-When **Planned Left Over** is positive, a quiet note suggests assigning the remainder for users who prefer a zero-based budget. It is informational and does not block other workflows.
-
 ### Create a new month
 
-Choose **New month** from the selected budget. The new month copies the latest month's categories and planned budget items, resets copied item actuals, starts with an empty transaction ledger, and carries forward the prior month's actual leftover. Transactions remain with the month in which they were recorded.
+Choose **+** beside the month tabs. A confirmation explains that creating the next month ends the current month and carries forward an amount based on the selected **Settings → New-month carryover** rule. The default is actual leftover; you can instead use planned unallocated income. The selected rule is recorded for each new month, so changing the preference only affects future months and leaves existing carryovers unchanged. The new month copies planned categories and budget items, resets actuals, and starts with an empty transaction ledger. Transactions remain with the month in which they were recorded.
 
 Use **Schedule item** in a non-income category to repeat a planned expense weekly, biweekly, or monthly. Each occurrence is added as a planned item with its due date; actual spending is recorded separately. Adding a schedule also fills matching future months already in the budget series.
 
 Use **Manage recurring** above the categories to edit a schedule, change its category, pause or resume it, or remove it. Changes update future planned entries in existing months. Historical entries and entries with actual amounts or linked transactions are retained when a schedule is paused or removed.
 
-If a month is deleted, carryovers for remaining months in that budget are recalculated in month order. **Delete entire budget** removes all months and transactions in that named budget.
+Use the ellipsis menu to delete the selected month. Carryovers for remaining months are recalculated in month order.
 
 ### Back up and restore data
 
-Use the download and upload controls in the sidebar to export a JSON backup or restore one. A backup includes all budgets, the active budget, your name, and saved preferences. Importing replaces the current data after confirmation; keep a copy of the backup somewhere safe.
+Use the export and import controls in the sidebar to download a JSON backup or restore one. A backup includes the budget's months and saved preferences. Importing replaces the current data after confirmation; when a legacy backup contains multiple independent budgets, only its active budget and its months are restored.
 
 ## Calculations
 
-For each spending type, the difference is actual minus planned. A negative income difference is shown as unfavorable; for spending types, spending above plan is unfavorable.
+For income, the difference is actual minus planned; for categories, spending above plan is unfavorable.
 
 ```text
 Planned leftover = planned income + opening carryover - planned spending
 Actual leftover  = actual income + opening carryover - actual spending
 ```
 
-Actual income and spending include both manually entered item actuals and transactions. Transactions are counted once in their category totals. The Top Spending list ranks positive actual spending from budget items and transactions; income transactions are excluded.
+The Settings page lets you format dates as month-day-year, day-month-year, or ISO 8601 (`YYYY-MM-DD`), and choose among USD, EUR, GBP, CAD, AUD, NZD, JPY, CNY, INR, CHF, MXN, and BRL. Currency symbols, separators, and decimal places follow the device's locale and the selected currency.
 
-Amounts are displayed in US dollars (USD). The app does not connect to financial institutions or import transactions automatically.
+Actual income and spending include both manually entered item actuals and transactions. Transactions are counted once in their category totals.
+
+Amounts are displayed in US dollars (USD) by default; the currency can be changed in Settings. The app does not connect to financial institutions or import transactions automatically.
 
 ## Getting started
 
@@ -188,7 +192,7 @@ Keep using the same `kestralbudget-data` volume when replacing the container. Re
 
 The container edition stores budgets in `/data/kestralbudget.sqlite`; mount a persistent Podman volume there to retain data across container replacement. The desktop edition stores its SQLite database under Electron's per-user `userData` directory using the WebAssembly SQLite adapter. Each edition has its own database. The container app imports existing `localStorage` budgets once when its server database is first initialized; after that, the server database is authoritative. Neither edition has accounts, cloud sync, or automatic backups. Do not expose the container API to an untrusted network, and keep independent backups of important data.
 
-The app restores the previously selected budget when available and supports a user-configurable default budget. Backups are manual; store exported files securely and keep independent copies of important data.
+The app restores the previously selected month in its single budget. Backups are manual; store exported files securely and keep independent copies of important data.
 
 ## Project structure
 
@@ -200,7 +204,7 @@ src/budget.css             Main interface and responsive styles
 src/budget-workflow.css    Dialog, setup, and action-menu styles
 src/guided-tour.css         Guided tour overlay and top-bar control
 src/paycheck-scheduler.js   Recurring income and expense date generation
-src/preferences.js          Default-budget preference helpers
+src/preferences.js          Legacy preference helpers
 src/transactions.css        Transaction search, filters, and bulk actions
 src/recurring-expenses.css  Recurring expense category controls
 src/budget-feedback.css    Subtle planned-leftover feedback

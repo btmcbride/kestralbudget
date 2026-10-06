@@ -25,6 +25,7 @@ function isBudget(value) {
     && typeof value.name === 'string'
     && typeof value.month === 'string'
     && (value.seriesId === undefined || typeof value.seriesId === 'string')
+    && (value.carryoverMethod === undefined || ['actual', 'planned'].includes(value.carryoverMethod))
     && (value.selectedTypes === undefined || (Array.isArray(value.selectedTypes) && value.selectedTypes.every((type) => typeof type === 'string')))
     && Array.isArray(value.categories)
     && value.categories.every(isCategory)
@@ -69,7 +70,15 @@ function isBudgetState(value) {
       && (value.preferences.userName === undefined || value.preferences.userName === null || typeof value.preferences.userName === 'string')
       && (value.preferences.transactionSortField === undefined || ['date', 'type', 'category', 'description', 'amount'].includes(value.preferences.transactionSortField))
       && (value.preferences.transactionSortDirection === undefined || value.preferences.transactionSortDirection === 'asc' || value.preferences.transactionSortDirection === 'desc')
-            && (value.preferences.theme === undefined || ['system', 'light', 'dark'].includes(value.preferences.theme))    ));
+      && (value.preferences.theme === undefined || ['system', 'light', 'dark'].includes(value.preferences.theme))
+      && (value.preferences.carryoverMethod === undefined || ['actual', 'planned'].includes(value.preferences.carryoverMethod))
+      && (value.preferences.weekStartsOn === undefined || ['sunday', 'monday'].includes(value.preferences.weekStartsOn))
+      && (value.preferences.accentColor === undefined || ['forest', 'blue', 'purple', 'amber', 'rose'].includes(value.preferences.accentColor))
+      && (value.preferences.density === undefined || ['comfortable', 'compact'].includes(value.preferences.density))
+      && (value.preferences.textSize === undefined || ['small', 'medium', 'large'].includes(value.preferences.textSize))
+      && (value.preferences.currency === undefined || ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'NZD', 'JPY', 'CNY', 'INR', 'CHF', 'MXN', 'BRL'].includes(value.preferences.currency))
+      && (value.preferences.dateFormat === undefined || ['mdy', 'dmy', 'iso'].includes(value.preferences.dateFormat))
+    ));
 }
 
 export function createBackup(state, createdAt = new Date().toISOString()) {

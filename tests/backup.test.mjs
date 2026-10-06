@@ -50,3 +50,30 @@ test('backup round-trips optional subscription reminder dates', () => {
 
   assert.deepEqual(parseBackup(createBackup(subscriptionState)), subscriptionState);
 });
+
+test('backup round-trips display, regional, calendar, and carryover preferences', () => {
+  const settingsState = structuredClone(state);
+  settingsState.budgets[0].carryoverMethod = 'planned';
+  settingsState.preferences = {
+    ...settingsState.preferences,
+    carryoverMethod: 'planned',
+    weekStartsOn: 'monday',
+    accentColor: 'purple',
+    density: 'compact',
+    textSize: 'large',
+    currency: 'EUR',
+    dateFormat: 'iso',
+  };
+
+  assert.deepEqual(parseBackup(createBackup(settingsState)), settingsState);
+});
+
+test('backup rejects invalid settings preferences', () => {
+  const invalidState = structuredClone(state);
+  invalidState.preferences = { ...invalidState.preferences, currency: 'FRA' };
+  assert.throws(() => createBackup(invalidState));
+
+  const invalidBudget = structuredClone(state);
+  invalidBudget.budgets[0].carryoverMethod = 'future';
+  assert.throws(() => createBackup(invalidBudget));
+});
