@@ -145,3 +145,7 @@ Open `http://localhost:8080`. Stop it with `podman compose down`; the named volu
 ## Data and privacy
 
 Kestral Budget has no accounts, bank connections, cloud sync, or automatic backups. The desktop app stores data on your computer; the self-hosted edition stores it in its configured database volume. Keep independent backups of important data.
+
+## License
+
+Kestral Budget is licensed under the GNU Affero General Public License v3.0 or later. See [LICENSE](LICENSE) for the full terms.
