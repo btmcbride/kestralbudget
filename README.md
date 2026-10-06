@@ -14,7 +14,6 @@
   · <a href="#budgeting-that-works-your-way">Features</a>
   · <a href="#why-kestral-budget">Why Kestral?</a>
   · <a href="#self-host">Self-host</a>
-  · <a href="https://ko-fi.com/mythicalbeard">Buy me a coffee</a>
 </p>
 
 <p align="center">
