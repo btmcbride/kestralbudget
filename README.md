@@ -23,15 +23,17 @@
   <img src="https://img.shields.io/badge/no-subscription%20fee-2ea043" alt="No subscription fee">
 </p>
 
-**Make it your budget.** Customize sections and categories, with no app-imposed limit on categories or budget items. Install it as a standalone desktop app or self-host it. No subscription fees or paid features.
+Kestral Budget brings your monthly plan and actual spending together. Plan income, bills, savings, and everyday expenses; record transactions against your budget items; then see how real activity compares with your plan. At a glance, understand what’s allocated, what’s still available, and what can carry forward.
 
-## Features
+**Make it your budget.** Add as many categories and budget items as you need, choose the sections you use, and personalize your currency, date format, theme, and layout. Run it as a standalone desktop app or self-host it. There are no subscription fees or feature paywalls.
 
-- **Plan by month:** Compare planned and actual income and spending, track unallocated income, and carry a chosen balance forward.
-- **Customize your setup:** Choose budget sections, add custom sections and items, and personalize the theme, currency, date format, and layout.
-- **Track activity:** Record transactions, link them to budget items, and search, filter, sort, or manage them in bulk.
-- **Keep an eye on due dates:** Schedule income and expenses, and see subscription reminders on a calendar.
-- **Understand your budget:** Run Budget Performance, Cash Flow & Leftover Income, or Spending Trends reports.
+## Budgeting that works your way
+
+- **Plan and adjust:** Set monthly targets, compare planned with actual income and spending, see unallocated income, and carry a balance forward when you choose.
+- **Shape your setup:** Organize your budget with the categories, sections, and items that make sense to you. Choose your currency, date format, theme, and layout.
+- **Track the details:** Log transactions against budget items, then search, filter, sort, and manage activity in bulk.
+- **Keep due dates visible:** Add due dates to bills, subscriptions, and debts, and see upcoming subscriptions on a calendar.
+- **Learn from the numbers:** Use Budget Performance, Cash Flow & Leftover Income, and Spending Trends reports to explore your budget over time.
 
 ## Screenshots
 
@@ -53,72 +55,6 @@ Screenshots use fictional sample data. Select a preview to open its full-size im
 | Self-hosted app | [Docker Compose instructions](#self-host-with-docker-compose) | Your own computer or server |
 
 The desktop and self-hosted editions use separate databases. Export and import a backup to move data between them. Backups are manual; do not expose a self-hosted instance to an untrusted network.
-
-## Build and release
-
-### Run locally
-
-Requires Node.js 22 or later and npm. Start the API and frontend in separate terminals:
-
-```powershell
-npm install
-npm run api
-```
-
-```powershell
-npm run dev
-```
-
-Check and build the app:
-
-```powershell
-npm run typecheck
-npm run build
-```
-
-### Build desktop installers
-
-**Windows x64**
-
-```powershell
-npm ci
-npm run desktop:dist
-```
-
-Output: `release/windows/`
-
-**macOS Apple Silicon**
-
-```bash
-npm ci
-npm run desktop:dist:mac
-```
-
-Output: `release/mac/`. The macOS build is unsigned; sign and notarize it before broad distribution.
-
-### Publish a release
-
-Run from the repository root. Bump the version (`patch`, `minor`, or `major`), then commit the version change and release code **before** creating the tag:
-
-```powershell
-npm version patch --no-git-tag-version
-$version = node -p "require('./package.json').version"
-git status
-git add -A
-git commit -m "Release v$version"
-git push origin main
-git tag "v$version"
-git push origin "v$version"
-```
-
-The `Desktop Builds` workflow builds the commit referenced by the tag and publishes the installers. Check the GitHub release for both assets.
-
-To list or remove an asset from a release, use its exact filename:
-
-```powershell
-gh release view "v$version" --json assets --jq ".assets[].name"
-gh release delete-asset "v$version" "exact-asset-filename" --yes
-```
 
 ### Self-host with Docker Compose
 
