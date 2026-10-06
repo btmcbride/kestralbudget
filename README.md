@@ -29,7 +29,7 @@ Use the budget actions menu to set a budget as the default. Its star appears bes
 The selected month has two views:
 
 - **Overview** shows income, allocated amounts, planned and actual leftover, planned-versus-actual differences, the top 20 actual spending items, and budget categories.
-- **Transactions** shows that month's dated transaction ledger. Use **Add transaction** to enter a date, description, amount, and category. You can optionally assign it to a budget item in that category. Search by description, category, or date, filter by category, and select visible transactions for bulk deletion. Transactions can be edited, duplicated, or deleted individually.
+- **Transactions** shows that month's dated transaction ledger. Use **Add transaction** to enter a date, description, amount, and category. You can optionally assign it to a budget item in that category. Search by description, budget item, category, or date, filter by budget item or category (or both), and select visible transactions for bulk deletion. Transactions can be edited, duplicated, or deleted individually.
 
 The category determines how a transaction is counted: transactions under Income add to actual income; transactions under other categories add to actual spending. A transaction linked to a budget item also appears in that item's actual amount. Category-only transactions still affect category totals and leftover, but are not assigned to a specific item.
 
