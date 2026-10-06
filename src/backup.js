@@ -65,6 +65,7 @@ function isBudgetState(value) {
     && (value.preferences === undefined || (
       isRecord(value.preferences)
       && (value.preferences.defaultBudgetId === undefined || value.preferences.defaultBudgetId === null || typeof value.preferences.defaultBudgetId === 'string')
+      && (value.preferences.userName === undefined || value.preferences.userName === null || typeof value.preferences.userName === 'string')
     ));
 }
 
@@ -76,7 +77,7 @@ export function createBackup(state, createdAt = new Date().toISOString()) {
     createdAt,
     budgets: state.budgets,
     active: state.active,
-    preferences: state.preferences ?? { defaultBudgetId: null },
+    preferences: state.preferences ?? { defaultBudgetId: null, userName: null },
   }, null, 2);
 }
 
@@ -88,6 +89,6 @@ export function parseBackup(contents) {
   return {
     budgets: backup.budgets,
     active: backup.active,
-    preferences: backup.preferences ?? { defaultBudgetId: null },
+    preferences: backup.preferences ?? { defaultBudgetId: null, userName: null },
   };
 }

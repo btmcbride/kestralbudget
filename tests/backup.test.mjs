@@ -13,7 +13,7 @@ const state = {
     expenseSchedules: [{ id: 'rent', categoryId: 'bills', name: 'Rent', amount: 1800, frequency: 'monthly', intervalDays: 30, nextDueDate: '2026-10-01', paused: true }],
   }],
   active: 'month-1',
-  preferences: { defaultBudgetId: 'series-1' },
+  preferences: { defaultBudgetId: 'series-1', userName: 'Brandon' },
 };
 
 test('backup round-trips budgets, active selection, and preferences', () => {

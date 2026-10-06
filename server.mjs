@@ -60,8 +60,11 @@ async function handleApi(request, response, pathname, storage) {
       return;
     }
     const preferences = payload.preferences && typeof payload.preferences === 'object'
-      ? { defaultBudgetId: payload.preferences.defaultBudgetId === null || typeof payload.preferences.defaultBudgetId === 'string' ? payload.preferences.defaultBudgetId : null }
-      : { defaultBudgetId: null };
+      ? {
+        defaultBudgetId: payload.preferences.defaultBudgetId === null || typeof payload.preferences.defaultBudgetId === 'string' ? payload.preferences.defaultBudgetId : null,
+        userName: payload.preferences.userName === null || typeof payload.preferences.userName === 'string' ? payload.preferences.userName : null,
+      }
+      : { defaultBudgetId: null, userName: null };
     storage.writeState(JSON.stringify({ budgets: payload.budgets, active: payload.active, preferences }));
     sendJson(response, 200, { saved: true });
     return;

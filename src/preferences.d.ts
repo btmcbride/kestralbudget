@@ -1,5 +1,6 @@
 export interface BudgetPreferences {
   defaultBudgetId: string | null;
+  userName?: string | null;
 }
 
 export function getDefaultBudgetId(preferences?: Partial<BudgetPreferences>): string | null;

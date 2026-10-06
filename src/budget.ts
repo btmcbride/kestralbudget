@@ -94,6 +94,7 @@ interface Budget {
 
 interface AppPreferences {
   defaultBudgetId: string | null;
+  userName?: string | null;
 }
 
 interface AppState {
@@ -189,7 +190,10 @@ function normalizeState(budgets: Budget[], active: string | null | undefined, pr
     budgets: normalizedBudgets,
     active: resolvedActive,
     view: 'home',
-    preferences: { defaultBudgetId: defaultBudgetId ?? null },
+    preferences: {
+      defaultBudgetId: defaultBudgetId ?? null,
+      userName: typeof preferences.userName === 'string' ? preferences.userName : null,
+    },
   };
 }
 function load(): AppState {
@@ -199,7 +203,7 @@ function load(): AppState {
   } catch { /* Start with a clean local workspace if stored data is invalid. */ }
   return normalizeState([], null);
 }
-const state: AppState = { budgets: [], active: null, view: 'home', preferences: { defaultBudgetId: null } };
+const state: AppState = { budgets: [], active: null, view: 'home', preferences: { defaultBudgetId: null, userName: null } };
 let wizard: WizardState | null = null;
 let guidedTourStep = 0;
 let guidedTourLayer: HTMLElement | null = null;
@@ -232,7 +236,7 @@ const displayDate = (date: string): string => {
 const greeting = (): string => {
   const h = new Date().getHours();
   const time = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-  const name = localStorage.getItem('kestral-user-name') || 'there';
+  const name = state.preferences.userName || 'there';
   return `${time}, ${esc(name)}`;
 };
 async function putState(budgets: Budget[], active: string | null, preferences: AppPreferences = state.preferences): Promise<void> {
@@ -276,15 +280,22 @@ async function initialize(): Promise<void> {
       state.budgets = normalized.budgets;
       state.active = normalized.active;
       state.preferences = normalized.preferences;
+      const legacyName = localStorage.getItem('kestral-user-name');
+      if (!state.preferences.userName && legacyName) {
+        state.preferences.userName = legacyName.slice(0, 40);
+        await putState(state.budgets, state.active, state.preferences);
+      }
     } else {
       const legacyState = load();
       state.budgets = legacyState.budgets;
       state.active = legacyState.active;
       state.preferences = legacyState.preferences;
+      const legacyName = localStorage.getItem('kestral-user-name');
+      if (!state.preferences.userName && legacyName) state.preferences.userName = legacyName.slice(0, 40);
       await putState(state.budgets, state.active, state.preferences);
     }
     render();
-    if (!localStorage.getItem('kestral-user-name')) onboardingDialog();
+    if (!state.preferences.userName) onboardingDialog();
   } catch (error) {
     console.error(error);
     root.innerHTML = '<section class="welcome"><p class="overline">DATA CONNECTION</p><h1>Unable to load budget data.</h1><p class="welcome-copy">Your saved data was not changed. Check the server and retry.</p><button class="button button-primary" data-action="retry-load">Retry</button></section>';
@@ -953,7 +964,10 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
   const data = new FormData(form);
   if (form.dataset.form === 'onboarding') {
     const newName = String(data.get('userName') || '').trim();
-    if (newName) localStorage.setItem('kestral-user-name', newName);
+    if (newName) {
+      state.preferences.userName = newName;
+      persist();
+    }
     dialog.close();
     render();
     return;

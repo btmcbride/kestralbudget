@@ -48,7 +48,7 @@ If a month is deleted, carryovers for remaining months in that budget are recalc
 
 ### Back up and restore data
 
-Use the download and upload controls in the sidebar to export a JSON backup or restore one. A backup includes all budgets, the active budget, and saved preferences. Importing replaces the current data after confirmation; keep a copy of the backup somewhere safe.
+Use the download and upload controls in the sidebar to export a JSON backup or restore one. A backup includes all budgets, the active budget, your name, and saved preferences. Importing replaces the current data after confirmation; keep a copy of the backup somewhere safe.
 
 ## Calculations
 
