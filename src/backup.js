@@ -6,7 +6,8 @@ function isEntry(value) {
     && typeof value.id === 'string'
     && typeof value.name === 'string'
     && Number.isFinite(value.planned)
-    && Number.isFinite(value.actual);
+    && Number.isFinite(value.actual)
+    && (value.dueDate === undefined || typeof value.dueDate === 'string');
 }
 
 function isCategory(value) {
@@ -51,7 +52,7 @@ function isBudget(value) {
       && value.categories.some((category) => category.id === schedule.categoryId)
       && typeof schedule.name === 'string'
       && Number.isFinite(schedule.amount)
-      && ['weekly', 'biweekly', 'monthly'].includes(schedule.frequency)
+      && ['weekly', 'biweekly', 'monthly', 'yearly'].includes(schedule.frequency)
       && typeof schedule.nextDueDate === 'string'
       && (schedule.paused === undefined || typeof schedule.paused === 'boolean')
     )));

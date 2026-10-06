@@ -64,6 +64,16 @@ export function buildIncomeEntriesForMonth(schedule, monthString) {
 export function buildExpenseEntriesForMonth(schedule, monthString) {
   const firstDueDate = String(schedule?.nextDueDate ?? '');
   if (!firstDueDate || schedule?.paused) return [];
+  if (schedule.frequency === 'yearly') {
+    const [year, month] = monthString.split('-').map(Number);
+    const [firstYear, firstMonth, firstDay] = firstDueDate.split('-').map(Number);
+    if (!year || !month || !firstYear || !firstMonth || !firstDay || month !== firstMonth) return [];
+    const day = clampDay(year, month - 1, firstDay);
+    const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return date >= firstDueDate
+      ? [{ id: `${schedule.id}-${date}`, date, amount: Number(schedule.amount ?? 0), name: schedule.name }]
+      : [];
+  }
   return buildIncomeEntriesForMonth({
     ...schedule,
     nextPayday: schedule?.nextDueDate,

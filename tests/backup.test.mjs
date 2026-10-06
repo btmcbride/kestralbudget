@@ -27,3 +27,26 @@ test('backup import rejects unsupported formats and invalid budget data', () => 
   assert.throws(() => parseBackup('{"format":"kestralbudget-backup","version":1,"budgets":[{"id":"x","name":"x","month":"2026-10","categories":[{"id":"c","type":"bills","name":"Bills","entries":[{}]}]}],"active":null}'));
   assert.throws(() => createBackup({ budgets: [{}], active: null }));
 });
+
+test('backup round-trips yearly subscription schedules', () => {
+  const subscriptionState = structuredClone(state);
+  subscriptionState.budgets[0].categories[0].type = 'subscriptions';
+  subscriptionState.budgets[0].expenseSchedules[0].frequency = 'yearly';
+  subscriptionState.budgets[0].expenseSchedules[0].nextDueDate = '2027-10-01';
+
+  assert.deepEqual(parseBackup(createBackup(subscriptionState)), subscriptionState);
+});
+
+test('backup round-trips optional subscription reminder dates', () => {
+  const subscriptionState = structuredClone(state);
+  subscriptionState.budgets[0].categories[0].type = 'subscriptions';
+  subscriptionState.budgets[0].categories[0].entries.push({
+    id: 'streaming',
+    name: 'Streaming',
+    planned: 15.99,
+    actual: 0,
+    dueDate: '2026-10-18',
+  });
+
+  assert.deepEqual(parseBackup(createBackup(subscriptionState)), subscriptionState);
+});

@@ -1,4 +1,5 @@
 export type PayFrequency = 'weekly' | 'biweekly' | 'monthly';
+export type ExpenseFrequency = PayFrequency | 'yearly';
 
 export interface PaycheckSchedule {
   id: string;
@@ -14,7 +15,7 @@ export interface RecurringExpenseSchedule {
   categoryId: string;
   name: string;
   amount: number;
-  frequency?: PayFrequency;
+  frequency?: ExpenseFrequency;
   intervalDays?: number;
   nextDueDate: string;
   paused?: boolean;
