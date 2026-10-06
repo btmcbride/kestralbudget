@@ -20,9 +20,9 @@ Choose **Create your first budget** and select the sections to include. Income i
 
 For recurring income, choose a weekly, biweekly, or monthly frequency and enter the next payday. The app generates a planned income item for each scheduled payday in each month. One-off or irregular income can still be entered manually.
 
-Use the left sidebar to navigate to **Dashboard**, **Transactions**, **Subscription Tracking**, **Monthly Review**, or **Reports**. Open **Settings** at the bottom of the sidebar to customize the theme, accent color, text size, and layout density, and to choose currency, date format, calendar week start, and month carryover preferences. Reports is a placeholder for a future update. Export and import options remain in the sidebar.
+Use the left sidebar to navigate to **Dashboard**, **Transactions**, **Subscription Tracking**, **Monthly Review**, or **Reports**. Open **Settings** at the bottom of the sidebar to customize the theme, accent color, text size, and layout density, and to choose currency, date format, calendar week start, and month carryover preferences. Export and import options remain in the sidebar.
 
-Custom categories can be added from the Dashboard after setup. When setup finishes, you can start an optional guided tour; use the graduation-cap **App tour** button in the top bar to replay it later.
+Custom categories can be added from the Dashboard after setup. When setup finishes, you can start an optional guided tour; use the graduation-cap **App tour** button above Settings in the sidebar to replay it later.
 
 ### Dashboard and Transactions
 
@@ -36,6 +36,10 @@ Custom categories can be added from the Dashboard after setup. When setup finish
 **Monthly Review** compares recorded income and spending to the selected month's plan, including over- and under-plan categories.
 
 The category determines how a transaction is counted: transactions under Income add to actual income; transactions under other categories add to actual spending. A transaction linked to a budget item also appears in that item's actual amount. Category-only transactions still affect category totals and leftover, but are not assigned to a specific item.
+
+### Reports
+
+Reports lets you choose and run one of three reports: **Budget Performance** (planned vs. actual by category and budget item), **Cash Flow & Leftover Income** (monthly income, spending, carryover, and ending balances), or **Spending Trends** (category and item totals with month-over-month changes and subscription-category spending). Use the From/Through month selectors to choose the reporting period, which defaults to all available months; trends compare the latest selected month with the previous selected month when available. Return to the report list to run another report.
 
 ### Create a new month
 
