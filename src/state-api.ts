@@ -27,7 +27,7 @@ export function installDemoBanner(): void {
   bar.setAttribute('role', 'note');
   bar.id = 'demo-banner';
   const style = document.createElement('style');
-  style.textContent = '#demo-banner{position:fixed;top:0;left:0;right:0;z-index:1000;height:44px;overflow:hidden}body{padding-top:44px}.app-shell{min-height:calc(100vh - 44px)!important}.sidebar{top:44px!important;height:calc(100vh - 44px)!important}@media(max-width:720px){#demo-banner span{display:none}}';
+  style.textContent = '#demo-banner{position:fixed;top:0;left:0;right:0;z-index:1000;height:44px;overflow:hidden}body{padding-top:44px}@media(min-width:721px){.app-shell{min-height:calc(100vh - 44px)}.sidebar{top:44px;height:calc(100vh - 44px)}}@media(max-width:720px){#demo-banner{position:static;height:auto;padding:.5rem 1rem!important}#demo-banner span{display:none}body{padding-top:0}}';
   document.head.append(style);
   bar.style.cssText = 'display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:center;padding:0 1rem;background:#0d419d;color:#fff;font:14px/1.4 system-ui,sans-serif;text-align:center';
   bar.innerHTML = '<strong>Live demo</strong><span>Sample data, saved only in this browser. Nothing is sent anywhere.</span>'
