@@ -70,7 +70,7 @@ await click(dialog.getByRole('button', { name: /Add income/ }), 900);
 await click(dialog.getByRole('button', { name: /Continue/ }), 900);
 
 const later = [
-  [['Rent', '1450']],
+  [['Rent', '1450'], ['Electric', '100']],
   [['Groceries', '520'], ['Dining out', '150']],
   [['Streaming', '16']],
   [['Car loan', '320']],
@@ -104,11 +104,12 @@ async function addTransaction(description, amount, category, item) {
 }
 await addTransaction('Grocery store', '84.50', 'Expenses · Expenses', 'Groceries');
 await addTransaction('Pizza night', '38.20', 'Expenses · Expenses', 'Dining out');
-
-await pause(1500);
-await click(page.getByRole('button', { name: 'Transactions' }), 2500);
-await click(page.getByRole('button', { name: 'Reports' }), 3500);
-await click(page.getByRole('button', { name: 'Dashboard' }), 3000);
+await addTransaction('Electric bill (actual)', '136', 'Bills · Bills', 'Electric');
+await pause(3500);
+await click(page.getByRole('button', { name: 'Transactions' }), 2000);
+await click(page.getByRole('button', { name: 'Reports' }), 1500);
+await click(page.getByRole('button', { name: /Run report/ }).first(), 6000);
+await click(page.getByRole('button', { name: 'Dashboard' }), 2500);
 
 await context.close();
 await browser.close();

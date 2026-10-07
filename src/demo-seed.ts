@@ -1,4 +1,4 @@
-﻿// Sample data for the browser-only live demo. Dates are relative to today.
+// Sample data for the browser-only live demo. Dates are relative to today.
 const pad = (n: number): string => String(n).padStart(2, '0');
 const monthKey = (offset: number): string => {
   const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + offset);
@@ -26,14 +26,14 @@ function buildBudget(offset: number, seriesId: string) {
     id: id(), type, name,
     entries: items.map(([entryName, planned, actual, due]) => ({
       id: id(), name: entryName, planned,
-      actual: current ? (type === 'expenses' || type === 'income' ? 0 : actual > 0 && (due ?? 0) <= new Date().getDate() ? actual : 0) : (type === 'expenses' ? Math.round(planned * (0.85 + ((offset + 5) % 3) * 0.1)) : actual),
+      actual: current ? (type === 'expenses' || entryName === 'Electric' || type === 'income' ? 0 : actual > 0 && (due ?? 0) <= new Date().getDate() ? actual : 0) : (type === 'expenses' ? Math.round(planned * (0.85 + ((offset + 5) % 3) * 0.1)) : actual),
       ...(due ? { dueDate: day(month, due) } : {}),
     })),
   })));
   const entryId = (name: string) => categories.flatMap((c) => c.entries.map((e) => ({ e, c }))).find(({ e }) => e.name === name)!;
   const transactions = current ? ([
     ['Paycheck - Acme Co', 4200, 1], ['Side projects', 350, 6], ['Groceries', 86.4, 2], ['Groceries', 112.15, 8], ['Fuel', 48.7, 3],
-    ['Dining out', 42.5, 5], ['Dining out', 31.2, 9], ['Fun money', 24, 7],
+    ['Dining out', 42.5, 5], ['Dining out', 31.2, 9], ['Fun money', 24, 7], ['Electric', 131, 9],
   ] as Array<[string, number, number]>).filter(([, , d]) => d <= Math.max(new Date().getDate(), 9)).map(([name, amount, d]) => {
     const { e, c } = entryId(name);
     return { id: id(), date: day(month, d), description: name, amount, categoryId: c.id, entryId: e.id };

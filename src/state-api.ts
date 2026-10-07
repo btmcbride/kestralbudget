@@ -3,7 +3,7 @@ import { demoSeed } from './demo-seed.js';
 type StatePayload = { budgets: unknown[]; active: string | null; preferences: Record<string, unknown> };
 
 export const IS_DEMO = import.meta.env.MODE === 'demo';
-const DEMO_KEY = 'kestral-demo-state.v1';
+const DEMO_KEY = 'kestral-demo-state.v2';
 
 export async function fetchState(): Promise<Response> {
   if (!IS_DEMO) return fetch('/api/state');
