@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://kestralbudget.app/sitemap.xml
