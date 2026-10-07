@@ -44,3 +44,8 @@ footer a{color:var(--muted)}
 .macos-help summary{cursor:pointer;font-weight:600}
 .macos-help pre{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:.6rem .9rem;overflow-x:auto}
 video.demo{display:block;width:100%;max-width:960px;margin:1.5rem auto 0;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.zoomable{cursor:zoom-in}
+.lightbox{border:0;padding:0;background:transparent;max-width:96vw;max-height:96vh;overflow:visible}
+.lightbox::backdrop{background:rgba(1,4,9,.88)}
+.lightbox img{display:block;max-width:96vw;max-height:92vh;border-radius:10px;cursor:zoom-out}
+.lightbox button{position:fixed;top:.75rem;right:1rem;background:none;border:0;color:#fff;font-size:2.2rem;line-height:1;cursor:pointer}
