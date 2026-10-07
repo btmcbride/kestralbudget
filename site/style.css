@@ -51,3 +51,18 @@ video.demo{display:block;width:100%;max-width:960px;margin:1.5rem auto 0;border:
 .lightbox button{position:fixed;top:.75rem;right:1rem;background:none;border:0;color:#fff;font-size:2.2rem;line-height:1;cursor:pointer}
 .cta .selfhost-note{max-width:34rem;text-align:center}
 .cta .selfhost-note a{color:var(--accent)}
+.page{max-width:760px;padding:3rem 1.5rem 4rem}
+.page h1{font-size:clamp(1.8rem,4vw,2.4rem);line-height:1.2;margin:0 0 .75rem}
+.page h2{text-align:left;font-size:1.35rem;margin:2.25rem 0 .75rem}
+.page .lead{color:var(--muted);font-size:1.15rem;margin:0 0 1.5rem}
+.page p,.page li{color:var(--text)}
+.page ul{padding-left:1.25rem}
+.page .note{text-align:left}
+.page code{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:.1em .35em;font-size:.9em}
+.page pre{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:.9rem 1.1rem;overflow-x:auto}
+.page pre code{background:none;border:0;padding:0}
+.callout{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:.9rem 1.1rem}
+details.faq{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:.75rem 1.1rem;margin:0 0 .75rem}
+details.faq summary{cursor:pointer;font-weight:600}
+details.faq p{margin:.6rem 0 0;color:var(--muted)}
+details.faq p a{color:var(--accent)}

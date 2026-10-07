@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FAQ | Kestral Budget</title>
+  <meta name="description" content="Answers about Kestral Budget: bank connections, backups, pricing, platforms, the unsigned macOS build, self-hosting, and where your data lives.">
+  <meta name="theme-color" content="#0d1117">
+  <link rel="icon" type="image/png" href="/img/kestral-mark.png">
+  <link rel="canonical" href="https://kestralbudget.app/faq/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Kestral Budget">
+  <meta property="og:title" content="FAQ | Kestral Budget">
+  <meta property="og:description" content="Answers about Kestral Budget: bank connections, backups, pricing, platforms, the unsigned macOS build, self-hosting, and where your data lives.">
+  <meta property="og:url" content="https://kestralbudget.app/faq/">
+  <meta property="og:image" content="https://kestralbudget.app/img/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","mainEntity":[{"acceptedAnswer":{"text":"No. There are no bank connections. You enter and categorize transactions yourself, so no one gets your bank login.","@type":"Answer"},"name":"Does Kestral Budget connect to my bank?","@type":"Question"},{"acceptedAnswer":{"text":"Yes. There is no subscription, no trial, and no paid feature tier. If you find it useful, you can support development on Ko-fi.","@type":"Answer"},"name":"Is it really free?","@type":"Question"},{"acceptedAnswer":{"text":"On your own computer. The desktop app keeps it in a local database, and a self-hosted copy keeps it in the database volume you configure. It is not sent to a cloud service. See the privacy page for details.","@type":"Answer"},"name":"Where is my data stored?","@type":"Question"},{"acceptedAnswer":{"text":"The desktop app is available for Windows (x64) and macOS (Apple Silicon). You can also self-host it with Docker, Portainer, or Podman on your own computer or server.","@type":"Answer"},"name":"Which platforms are supported?","@type":"Question"},{"acceptedAnswer":{"text":"No. There is no cloud sync. The desktop and self-hosted editions use separate databases, and you can move data between them with Export backup and Import backup.","@type":"Answer"},"name":"Does it sync between devices?","@type":"Question"},{"acceptedAnswer":{"text":"Backups are manual. Use Export backup in the app to save a file, and Import backup to restore it. Keep copies of anything important.","@type":"Answer"},"name":"How do I back up my budget?","@type":"Question"},{"acceptedAnswer":{"text":"As many as you like. You choose the sections, categories and items that fit your life, and you can set your currency, date format, theme and layout.","@type":"Answer"},"name":"How many categories and budget items can I have?","@type":"Question"},{"acceptedAnswer":{"text":"The Mac build is not yet signed or notarized by Apple, so Gatekeeper may block the first launch. The app is not damaged. If macOS says it cannot verify the app, open System Settings -\u003e Privacy \u0026 Security and click Open Anyway. If it says the app is damaged, run xattr -cr \"/Applications/Kestral Budget.app\" in Terminal and open it again. Only do this for apps you downloaded from the official release page.","@type":"Answer"},"name":"Why does macOS say the app is damaged or cannot be verified?","@type":"Question"},{"acceptedAnswer":{"text":"Yes. Kestral Budget is open source under the GNU Affero General Public License v3.0 or later. The code is on GitHub.","@type":"Answer"},"name":"Is the source code available?","@type":"Question"},{"acceptedAnswer":{"text":"The app has no accounts or login, so do not expose a self-hosted copy to an untrusted network. It is designed for personal use on a network you trust.","@type":"Answer"},"name":"Can I use it on a server for several people?","@type":"Question"}],"@type":"FAQPage"}
+  </script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/"><img src="/img/kestral-mark.png" alt="" width="32" height="32"> Kestral Budget</a>
+    <nav>
+      <a href="/#features">Features</a>
+      <a href="/self-hosting/">Self-hosting</a>
+      <a href="/privacy/">Privacy</a>
+      <a href="/faq/">FAQ</a>
+      <a href="/#download">Download</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    <h1>Frequently asked questions</h1>
+    <p class="lead">Quick answers about privacy, platforms, backups, and getting started.</p>
+    <details class="faq"><summary>Does Kestral Budget connect to my bank?</summary><p>No. There are no bank connections. You enter and categorize transactions yourself, so no one gets your bank login.</p></details>
+    <details class="faq"><summary>Is it really free?</summary><p>Yes. There is no subscription, no trial, and no paid feature tier. If you find it useful, you can <a href="https://ko-fi.com/mythicalbeard">support development on Ko-fi</a>.</p></details>
+    <details class="faq"><summary>Where is my data stored?</summary><p>On your own computer. The desktop app keeps it in a local database, and a self-hosted copy keeps it in the database volume you configure. It is not sent to a cloud service. See the <a href="/privacy/">privacy page</a> for details.</p></details>
+    <details class="faq"><summary>Which platforms are supported?</summary><p>The desktop app is available for Windows (x64) and macOS (Apple Silicon). You can also <a href="/self-hosting/">self-host it with Docker, Portainer, or Podman</a> on your own computer or server.</p></details>
+    <details class="faq"><summary>Does it sync between devices?</summary><p>No. There is no cloud sync. The desktop and self-hosted editions use separate databases, and you can move data between them with Export backup and Import backup.</p></details>
+    <details class="faq"><summary>How do I back up my budget?</summary><p>Backups are manual. Use <strong>Export backup</strong> in the app to save a file, and <strong>Import backup</strong> to restore it. Keep copies of anything important.</p></details>
+    <details class="faq"><summary>How many categories and budget items can I have?</summary><p>As many as you like. You choose the sections, categories and items that fit your life, and you can set your currency, date format, theme and layout.</p></details>
+    <details class="faq"><summary>Why does macOS say the app is damaged or cannot be verified?</summary><p>The Mac build is not yet signed or notarized by Apple, so Gatekeeper may block the first launch. The app is not damaged. If macOS says it cannot verify the app, open <strong>System Settings &rarr; Privacy &amp; Security</strong> and click <strong>Open Anyway</strong>. If it says the app is damaged, run <code>xattr -cr "/Applications/Kestral Budget.app"</code> in Terminal and open it again. Only do this for apps you downloaded from the <a href="https://github.com/btmcbride/kestralbudget/releases/latest">official release page</a>.</p></details>
+    <details class="faq"><summary>Is the source code available?</summary><p>Yes. Kestral Budget is open source under the GNU Affero General Public License v3.0 or later. The code is on <a href="https://github.com/btmcbride/kestralbudget">GitHub</a>.</p></details>
+    <details class="faq"><summary>Can I use it on a server for several people?</summary><p>The app has no accounts or login, so do not expose a self-hosted copy to an untrusted network. It is designed for personal use on a network you trust.</p></details>
+  </main>
+
+  <footer>
+    <a href="/self-hosting/">Self-hosting</a> &middot;
+    <a href="/privacy/">Privacy</a> &middot;
+    <a href="/faq/">FAQ</a> &middot;
+    <a href="https://github.com/btmcbride/kestralbudget">GitHub</a> &middot;
+    <a href="https://ko-fi.com/mythicalbeard">Support on Ko-fi</a> &middot;
+    <span>&copy; Kestral Budget</span>
+  </footer>
+</body>
+</html>

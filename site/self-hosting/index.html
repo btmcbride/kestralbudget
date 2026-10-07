@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Self-host Kestral Budget with Docker, Portainer, or Podman</title>
+  <meta name="description" content="Run Kestral Budget on your own computer or server with Docker, Portainer, or Podman. Your data stays in a persistent volume you control.">
+  <meta name="theme-color" content="#0d1117">
+  <link rel="icon" type="image/png" href="/img/kestral-mark.png">
+  <link rel="canonical" href="https://kestralbudget.app/self-hosting/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Kestral Budget">
+  <meta property="og:title" content="Self-host Kestral Budget with Docker, Portainer, or Podman">
+  <meta property="og:description" content="Run Kestral Budget on your own computer or server with Docker, Portainer, or Podman. Your data stays in a persistent volume you control.">
+  <meta property="og:url" content="https://kestralbudget.app/self-hosting/">
+  <meta property="og:image" content="https://kestralbudget.app/img/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/"><img src="/img/kestral-mark.png" alt="" width="32" height="32"> Kestral Budget</a>
+    <nav>
+      <a href="/#features">Features</a>
+      <a href="/self-hosting/">Self-hosting</a>
+      <a href="/privacy/">Privacy</a>
+      <a href="/faq/">FAQ</a>
+      <a href="/#download">Download</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    <h1>Self-host Kestral Budget</h1>
+    <p class="lead">Run Kestral Budget on your own computer or server with Docker, Portainer, or Podman.</p>
+    <p>Self-hosting runs the same Kestral Budget app on your own computer or server. All options keep your data in a persistent volume you control. Prefer a desktop app? <a href="/#download">Download it for Windows or macOS</a> instead.</p>
+    <p class="callout">The desktop and self-hosted editions use separate databases. Use <strong>Export backup</strong> and <strong>Import backup</strong> to move data between them. Do not expose a self-hosted instance to an untrusted network, because the app has no login.</p>
+
+    <h2 id="docker">Docker</h2>
+    <p>Install <a href="https://docs.docker.com/get-started/get-docker/">Docker Desktop</a> or Docker Engine with the Compose plugin, and make sure Git is available. From a terminal:</p>
+    <pre><code>git clone https://github.com/btmcbride/kestralbudget.git
+cd kestralbudget
+docker compose up --build -d</code></pre>
+    <p>Open <code>http://localhost:8080</code>. Data is stored in the persistent <code>kestralbudget-data</code> volume. Stop the app with <code>docker compose down</code>, which keeps your data. Avoid <code>docker compose down -v</code> unless you intend to delete it.</p>
+
+    <h2 id="portainer">Portainer</h2>
+    <p>Portainer&rsquo;s Git-based stack deployment does not build this repository&rsquo;s Docker image automatically. Build the image on the same Docker host that Portainer manages:</p>
+    <pre><code>git clone https://github.com/btmcbride/kestralbudget.git
+cd kestralbudget
+docker build -f DockerFile -t kestralbudget:local .</code></pre>
+    <p>In Portainer, select that Docker environment, open <strong>Stacks &rarr; Add stack &rarr; Web editor</strong>, and use this Compose definition:</p>
+    <pre><code>services:
+  kestralbudget:
+    image: kestralbudget:local
+    ports:
+      - "8080:8080"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      DATABASE_PATH: /data/kestralbudget.sqlite
+    volumes:
+      - kestralbudget-data:/data
+    restart: unless-stopped
+
+volumes:
+  kestralbudget-data:</code></pre>
+    <p>Deploy the stack and open <code>http://localhost:8080</code>. The database is kept in the named volume.</p>
+
+    <h2 id="podman">Podman Desktop</h2>
+    <p>Install <a href="https://podman-desktop.io/">Podman Desktop</a> and start its Podman machine. Go to <strong>Settings &rarr; Resources &rarr; Compose &rarr; Setup</strong> to install the Compose provider (<a href="https://podman-desktop.io/docs/compose/setting-up-compose">Podman Compose setup</a>). Then clone the repository and start the app:</p>
+    <pre><code>git clone https://github.com/btmcbride/kestralbudget.git
+cd kestralbudget
+podman compose up --build -d</code></pre>
+    <p>Open <code>http://localhost:8080</code>. Stop it with <code>podman compose down</code>. The named volume preserves your data.</p>
+
+    <p class="note">Questions or problems? <a href="https://github.com/btmcbride/kestralbudget/issues">Open an issue on GitHub</a>. See also the <a href="/faq/">FAQ</a> and the <a href="/privacy/">privacy details</a>.</p>
+  </main>
+
+  <footer>
+    <a href="/self-hosting/">Self-hosting</a> &middot;
+    <a href="/privacy/">Privacy</a> &middot;
+    <a href="/faq/">FAQ</a> &middot;
+    <a href="https://github.com/btmcbride/kestralbudget">GitHub</a> &middot;
+    <a href="https://ko-fi.com/mythicalbeard">Support on Ko-fi</a> &middot;
+    <span>&copy; Kestral Budget</span>
+  </footer>
+</body>
+</html>
