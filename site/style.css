@@ -38,3 +38,5 @@ footer a{color:var(--muted)}
 
 .kofi{grid-column:1/-1;text-align:center;margin:0}
 .kofi img{height:36px;width:auto;border:0;border-radius:0}
+.support{margin-bottom:.5rem}
+.download .kofi{margin-bottom:1rem}
