@@ -40,3 +40,6 @@ footer a{color:var(--muted)}
 .kofi img{height:36px;width:auto;border:0;border-radius:0}
 .support{margin-bottom:.5rem}
 .download .kofi{margin-bottom:1rem}
+.macos-help{max-width:40rem;margin:1rem auto;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:.75rem 1.25rem}
+.macos-help summary{cursor:pointer;font-weight:600}
+.macos-help pre{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:.6rem .9rem;overflow-x:auto}

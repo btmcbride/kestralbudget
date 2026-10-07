@@ -61,7 +61,14 @@
         <a class="button" href="https://github.com/btmcbride/kestralbudget/releases/latest">Download the latest release</a>
         <a class="button secondary" href="https://github.com/btmcbride/kestralbudget#install-or-self-host">Self-hosting instructions</a>
       </p>
-      <p class="note"><strong>macOS first launch:</strong> the Mac build is not yet signed by Apple, so macOS may say it cannot verify the app. Open <strong>System Settings &rarr; Privacy &amp; Security</strong>, scroll to the message about Kestral Budget, and click <strong>Open Anyway</strong>. The full source code is public on <a href="https://github.com/btmcbride/kestralbudget">GitHub</a>.</p>
+      <details class="macos-help">
+        <summary>macOS first-launch help (the Mac build is not yet signed by Apple)</summary>
+        <p>Drag Kestral Budget to your Applications folder, then open it. What happens next depends on your Mac:</p>
+        <p><strong>If macOS says it &ldquo;cannot verify&rdquo; the app or that it is from an unidentified developer:</strong> open <strong>System Settings &rarr; Privacy &amp; Security</strong>, scroll to the message about Kestral Budget, click <strong>Open Anyway</strong>, and confirm.</p>
+        <p><strong>If macOS says the app is &ldquo;damaged and can&rsquo;t be opened&rdquo;:</strong> the app is not damaged. macOS is blocking it because it is unsigned. Open <strong>Terminal</strong>, run the command below, then open the app again:</p>
+        <pre><code>xattr -cr "/Applications/Kestral Budget.app"</code></pre>
+        <p>This clears the download quarantine flag on that one app. Only do this for software you trust. The full source code is public on <a href="https://github.com/btmcbride/kestralbudget">GitHub</a>.</p>
+      </details>
       <p class="support">Kestral is free. If it&rsquo;s useful, you can support development.</p>
       <p class="kofi"><a href="https://ko-fi.com/mythicalbeard" target="_blank" rel="noopener"><img src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" height="36" alt="Buy Me a Coffee at ko-fi.com"></a></p>
       <p class="note">Kestral has no automatic bank connections, cloud sync, or automatic backups. Export backups of important data regularly.</p>
