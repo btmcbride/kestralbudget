@@ -43,3 +43,4 @@ footer a{color:var(--muted)}
 .macos-help{max-width:40rem;margin:1rem auto;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:.75rem 1.25rem}
 .macos-help summary{cursor:pointer;font-weight:600}
 .macos-help pre{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:.6rem .9rem;overflow-x:auto}
+video.demo{display:block;width:100%;max-width:960px;margin:1.5rem auto 0;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
