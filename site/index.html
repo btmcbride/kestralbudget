@@ -28,7 +28,9 @@
 <body>
   <header class="top">
     <a class="brand" href="#"><img src="img/kestral-mark.png" alt="" width="32" height="32"> Kestral Budget</a>
-    <nav>
+    <button class="menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false" aria-label="Open navigation"><span aria-hidden="true">☰</span></button>
+    <nav id="site-nav" aria-label="Main navigation">
+      <div class="nav-drawer-heading"><strong>Explore Kestral Budget</strong><button class="nav-close" type="button" aria-label="Close navigation">×</button></div>
       <a href="/#features">Features</a>
       <a href="/demo/">Live demo</a>
       <a href="/#screenshots">Screenshots</a>
@@ -38,6 +40,7 @@
       <a href="/#download">Download</a>
     </nav>
   </header>
+  <button class="nav-backdrop" type="button" aria-label="Close navigation" tabindex="-1"></button>
 
   <main>
     <section class="hero">
@@ -118,5 +121,6 @@
   </footer>
   <script src="release.js"></script>
   <script src="lightbox.js"></script>
+  <script src="/menu.js"></script>
 </body>
 </html>
