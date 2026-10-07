@@ -38,4 +38,7 @@ export function installDemoBanner(): void {
     location.reload();
   });
   document.body.prepend(bar);
+  const updateBannerHeight = () => document.body.style.setProperty('--demo-banner-height', `${bar.getBoundingClientRect().height}px`);
+  updateBannerHeight();
+  new ResizeObserver(updateBannerHeight).observe(bar);
 }

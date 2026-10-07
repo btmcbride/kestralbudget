@@ -563,6 +563,7 @@ function render(): void {
       : state.view === 'settings' ? settingsPage() : welcome();
   root.innerHTML = `<div class="app-shell"><aside class="sidebar">
     <a class="brand" href="#home" aria-label="Kestral Budget home"><span class="brand-mark"><img src="${import.meta.env.BASE_URL}kestral-mark.png" alt=""></span><span>Kestral Budget</span></a>
+    <button class="mobile-nav-close" type="button" data-action="close-sidebar" aria-label="Close navigation">×</button>
     <nav class="primary-nav" aria-label="Main navigation">
       <button class="sidebar-nav-item ${state.view === 'dashboard' ? 'active' : ''}" data-action="navigate" data-page="dashboard" ${state.view === 'dashboard' ? 'aria-current="page"' : ''}><span aria-hidden="true">⌂</span>Dashboard</button>
       <button class="sidebar-nav-item ${state.view === 'transactions' ? 'active' : ''}" data-action="navigate" data-page="transactions" ${state.view === 'transactions' ? 'aria-current="page"' : ''}><span aria-hidden="true">⇄</span>Transactions</button>
@@ -573,7 +574,8 @@ function render(): void {
     <div class="backup-actions"><button type="button" data-action="export-backup">Export backup</button><button type="button" data-action="import-backup">Import backup</button><input id="backup-file" type="file" accept="application/json,.json" hidden></div>
     <div class="sidebar-footer">${state.budgets.length ? '<button class="sidebar-nav-item tour-button" type="button" data-action="guided-tour" aria-label="Start app tour" data-tooltip="Replay the guided tour" title="Replay the guided tour"><span class="tour-cap" aria-hidden="true">🎓</span>App tour</button>' : ''}<button class="sidebar-nav-item sidebar-settings ${state.view === 'settings' ? 'active' : ''}" data-action="navigate" data-page="settings" ${state.view === 'settings' ? 'aria-current="page"' : ''}><span aria-hidden="true">⚙</span>Settings</button>
       <div class="sidebar-bottom"><span class="saved-dot"></span><span>${IS_DEMO ? 'Stored in this browser' : 'Stored in app database'}</span><span id="save-status">All changes saved</span></div></div></aside>
-    <main class="main-area"><header class="topbar"><div class="breadcrumb"><strong>${labels[state.view]}</strong></div><div class="topbar-actions"></div></header>${page}</main></div>`;
+    <button class="mobile-nav-backdrop" type="button" data-action="close-sidebar" aria-label="Close navigation"></button>
+    <main class="main-area"><header class="topbar"><button class="mobile-nav-toggle" type="button" data-action="toggle-sidebar" aria-label="Open navigation" aria-expanded="false"><span aria-hidden="true">☰</span></button><div class="breadcrumb"><strong>${labels[state.view]}</strong></div><div class="topbar-actions"></div></header>${page}</main></div>`;
   function settingsPage(): string {
     const themes: Array<[ThemePreference, string]> = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']];
     const weekStarts: Array<[WeekStart, string]> = [['sunday', 'Sunday'], ['monday', 'Monday']];
@@ -1400,8 +1402,21 @@ document.addEventListener('click', (event: MouseEvent) => {
   if (openBudgetMenu && !openBudgetMenu.contains(event.target)) openBudgetMenu.open = false;
   const button = event.target.closest<HTMLButtonElement>('[data-action]'); if (!button) return;
   const { action, id, category, type, entry, transaction, schedule } = button.dataset;
+  if (action === 'toggle-sidebar') {
+    const isOpen = document.body.classList.toggle('mobile-nav-open');
+    button.setAttribute('aria-expanded', String(isOpen));
+    button.setAttribute('aria-label', isOpen ? 'Close navigation' : 'Open navigation');
+    return;
+  }
+  if (action === 'close-sidebar') {
+    document.body.classList.remove('mobile-nav-open');
+    root.querySelector<HTMLButtonElement>('.mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
+    root.querySelector<HTMLButtonElement>('.mobile-nav-toggle')?.setAttribute('aria-label', 'Open navigation');
+    return;
+  }
   if (action === 'add-setup-group') { addSetupGroup(); return; }
   if (action === 'navigate' && ['dashboard', 'transactions', 'subscriptions', 'review', 'reports', 'settings'].includes(button.dataset.page ?? '')) {
+    document.body.classList.remove('mobile-nav-open');
     state.view = button.dataset.page as AppState['view'];
     if (state.view === 'reports') activeReport = null;
     if (state.view === 'dashboard' || state.view === 'transactions') dashboardTab = state.view === 'transactions' ? 'transactions' : 'overview';
@@ -1531,6 +1546,7 @@ document.addEventListener('click', (event: MouseEvent) => {
           entries: monthBudget.categories.flatMap((item) => item.entries.map((scheduledEntry, index) => ({ categoryId: item.id, index, entry: { ...scheduledEntry } })).filter(({ entry: scheduledEntry }) => scheduledEntry.scheduleId === schedule)),
         };
       });
+
       removeExpenseSchedule(schedule, budget);
       offerUndo(`Schedule for "${found.name}" removed`, () => {
         for (const snapshot of snapshots) {
@@ -1595,6 +1611,11 @@ document.addEventListener('click', (event: MouseEvent) => {
   }
 });
 document.addEventListener('keydown', (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && document.body.classList.contains('mobile-nav-open')) {
+    document.body.classList.remove('mobile-nav-open');
+    root.querySelector<HTMLButtonElement>('.mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
+    root.querySelector<HTMLButtonElement>('.mobile-nav-toggle')?.setAttribute('aria-label', 'Open navigation');
+  }
   if (event.key === 'Escape' && guidedTourLayer) {
     event.preventDefault();
     finishGuidedTour();

@@ -5,17 +5,6 @@
 /* Mobile layout */
 @media(max-width:720px){
   .app-shell{overflow-x:clip}
-  .sidebar{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:10px 12px 8px}
-  .sidebar .brand{order:1;margin:0;flex:1 1 auto}
-  .sidebar-footer{order:2;display:flex;gap:4px;margin:0;padding:0;border:0;width:auto}
-  .sidebar-footer .sidebar-nav-item{width:40px;height:40px;min-height:0;padding:0;justify-content:center}
-  .sidebar-footer .sidebar-nav-item{font-size:0;gap:0}.sidebar-footer .sidebar-nav-item>span{font-size:18px}
-  .sidebar-footer .sidebar-nav-item::after,.sidebar-footer .sidebar-nav-item::before{display:none}
-  .primary-nav{order:3;flex:0 0 100%;min-width:0;align-items:center;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin:0}
-  .primary-nav::-webkit-scrollbar{display:none}
-  .primary-nav .sidebar-nav-item{flex:0 0 auto;width:auto;min-height:38px;padding:0 12px;white-space:nowrap;font-size:13px}
-  .sidebar .backup-actions{order:4;flex:0 0 100%;display:flex;gap:6px;margin:0;padding:0}
-  .sidebar .backup-actions button{flex:1;min-height:30px;font-size:12px;padding:0 8px}
   .page-heading,.heading-actions{flex-wrap:wrap}
   .budget-tabs{overflow-x:auto;scrollbar-width:none}
   .metric-grid{grid-template-columns:1fr 1fr}
@@ -48,4 +37,49 @@
   .transactions-panel tr[data-transaction-row] td:nth-child(5){display:none}
   .transactions-panel tr[data-transaction-row] td.transaction-actions{grid-column:2/4;grid-row:4;display:flex;gap:14px;margin-top:4px}
   .transaction-no-results{padding:16px}
+}
+
+@media(max-width:720px){
+  .sidebar{
+    position:fixed;top:var(--demo-banner-height,0px);bottom:0;left:0;z-index:102;
+    display:flex;flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:10px;
+    width:min(320px,88vw);height:auto;min-height:0;padding:16px;
+    overflow-y:auto;background:var(--canvas);border-right:1px solid var(--line-soft);
+    box-shadow:var(--shadow-strong,0 16px 48px rgba(0,0,0,.45));
+    transform:translateX(-105%);transition:transform .22s ease;
+  }
+  body.mobile-nav-open{overflow:hidden}
+  body.mobile-nav-open .sidebar{transform:translateX(0)}
+  .sidebar .brand{order:0;flex:0 0 auto;margin:0;padding-right:42px}
+  .mobile-nav-close{
+    position:absolute;top:12px;right:12px;display:grid;place-items:center;
+    width:36px;height:36px;border:1px solid var(--line);border-radius:8px;
+    background:var(--surface);color:var(--text);font-size:24px;line-height:1;cursor:pointer
+  }
+  .primary-nav{order:0;display:flex;flex:0 0 auto;flex-direction:column;align-items:stretch;
+    gap:4px;width:100%;min-width:0;overflow:visible;margin:4px 0}
+  .primary-nav .sidebar-nav-item{width:100%;min-height:44px;justify-content:flex-start;padding:0 12px;font-size:14px}
+  .sidebar .backup-actions{order:0;flex:0 0 auto;display:grid;grid-template-columns:1fr 1fr;width:100%;
+    gap:7px;margin:0;padding:12px 0;border-top:1px solid var(--line-soft)}
+  .sidebar .backup-actions button{min-height:38px;font-size:12px}
+  .sidebar-footer{order:0;display:flex;flex:0 0 auto;flex-direction:column;align-items:stretch;gap:4px;
+    width:100%;margin-top:auto;padding-top:12px;border-top:1px solid var(--line-soft)}
+  .sidebar-footer .sidebar-nav-item{width:100%;height:44px;min-height:44px;justify-content:flex-start;
+    gap:8px;padding:0 12px;font-size:14px}
+  .sidebar-footer .sidebar-nav-item>span{font-size:18px}
+  .sidebar-bottom{display:flex}
+  .mobile-nav-toggle{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;margin-right:10px;
+    border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--text);font-size:18px;cursor:pointer}
+  .mobile-nav-backdrop{display:block;position:fixed;inset:var(--demo-banner-height,0px) 0 0;z-index:101;
+    width:100%;height:auto;padding:0;border:0;background:rgba(0,0,0,.48);opacity:0;visibility:hidden;
+    transition:opacity .22s ease,visibility .22s ease}
+  body.mobile-nav-open .mobile-nav-backdrop{opacity:1;visibility:visible}
+}
+
+@media(min-width:721px){
+  .mobile-nav-toggle,.mobile-nav-close,.mobile-nav-backdrop{display:none}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .sidebar,.mobile-nav-backdrop{transition:none}
 }
