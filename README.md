@@ -43,7 +43,7 @@ Kestral Budget brings your monthly plan and actual spending together. Plan incom
 
 ## Why Kestral Budget?
 
-Kestral is built around flexibility and ownership:
+Kestral is built around flexibility, privacy, and ownership:
 
 - **Your budget, your rules:** Create as many categories and budget items as you need, and choose the sections that fit your life.
 - **Your choice of where it runs:** Use the standalone desktop app or host it on your own computer or server.
