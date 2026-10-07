@@ -9,6 +9,7 @@ import './guided-tour.css';
 import './budget-feedback.css';
 import { buildExpenseEntriesForMonth, buildIncomeEntriesForMonth, type ExpenseFrequency } from './paycheck-scheduler.js';
 import { createBackup, parseBackup } from './backup.js';
+import { IS_DEMO, fetchState, sendState, installDemoBanner } from './state-api.js';
 
 const KEY = 'cryptic-budgets.v1';
 const GROUPS: StandardBudgetGroup[] = [
@@ -393,11 +394,7 @@ const displayDate = (date: string): string => {
   return dateFormatters[format].format(new Date(year, month - 1, day));
 };
 async function putState(budgets: Budget[], active: string | null, preferences: AppPreferences = state.preferences): Promise<void> {
-  const response = await fetch('/api/state', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ budgets, active, preferences }),
-  });
+  const response = await sendState(JSON.stringify({ budgets, active, preferences }));
   if (!response.ok) throw new Error(`Budget save failed (${response.status}).`);
 }
 function persist() {
@@ -407,11 +404,7 @@ function persist() {
   saveTimer = setTimeout(() => {
     const payload = JSON.stringify({ budgets: state.budgets, active: state.active, preferences: state.preferences });
     saveQueue = saveQueue.catch(() => undefined).then(async () => {
-      const response = await fetch('/api/state', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload,
-      });
+      const response = await sendState(payload);
       if (!response.ok) throw new Error(`Budget save failed (${response.status}).`);
       const currentStatus = document.querySelector('#save-status');
       if (currentStatus) currentStatus.textContent = 'All changes saved';
@@ -448,7 +441,7 @@ function restoreDeletedTransactions(budget: Budget, deleted: Array<{ index: numb
 async function initialize(): Promise<void> {
   root.innerHTML = '<section class="welcome"><p class="overline">LOADING YOUR BUDGET</p><h1>Connecting to your budget data...</h1></section>';
   try {
-    const response = await fetch('/api/state');
+    const response = await fetchState();
     if (!response.ok) throw new Error(`Budget load failed (${response.status}).`);
     const serverState = await response.json() as { budgets?: Budget[]; active?: string | null; initialized?: boolean; preferences?: Partial<AppPreferences> };
     if (serverState.initialized) {
@@ -569,7 +562,7 @@ function render(): void {
       ? reportsPage([])
       : state.view === 'settings' ? settingsPage() : welcome();
   root.innerHTML = `<div class="app-shell"><aside class="sidebar">
-    <a class="brand" href="#home" aria-label="Kestral Budget home"><span class="brand-mark"><img src="/kestral-mark.png" alt=""></span><span>Kestral Budget</span></a>
+    <a class="brand" href="#home" aria-label="Kestral Budget home"><span class="brand-mark"><img src="${import.meta.env.BASE_URL}kestral-mark.png" alt=""></span><span>Kestral Budget</span></a>
     <nav class="primary-nav" aria-label="Main navigation">
       <button class="sidebar-nav-item ${state.view === 'dashboard' ? 'active' : ''}" data-action="navigate" data-page="dashboard" ${state.view === 'dashboard' ? 'aria-current="page"' : ''}><span aria-hidden="true">⌂</span>Dashboard</button>
       <button class="sidebar-nav-item ${state.view === 'transactions' ? 'active' : ''}" data-action="navigate" data-page="transactions" ${state.view === 'transactions' ? 'aria-current="page"' : ''}><span aria-hidden="true">⇄</span>Transactions</button>
@@ -579,7 +572,7 @@ function render(): void {
     </nav>
     <div class="backup-actions"><button type="button" data-action="export-backup">Export backup</button><button type="button" data-action="import-backup">Import backup</button><input id="backup-file" type="file" accept="application/json,.json" hidden></div>
     <div class="sidebar-footer">${state.budgets.length ? '<button class="sidebar-nav-item tour-button" type="button" data-action="guided-tour" aria-label="Start app tour" data-tooltip="Replay the guided tour" title="Replay the guided tour"><span class="tour-cap" aria-hidden="true">🎓</span>App tour</button>' : ''}<button class="sidebar-nav-item sidebar-settings ${state.view === 'settings' ? 'active' : ''}" data-action="navigate" data-page="settings" ${state.view === 'settings' ? 'aria-current="page"' : ''}><span aria-hidden="true">⚙</span>Settings</button>
-      <div class="sidebar-bottom"><span class="saved-dot"></span><span>Stored in app database</span><span id="save-status">All changes saved</span></div></div></aside>
+      <div class="sidebar-bottom"><span class="saved-dot"></span><span>${IS_DEMO ? 'Stored in this browser' : 'Stored in app database'}</span><span id="save-status">All changes saved</span></div></div></aside>
     <main class="main-area"><header class="topbar"><div class="breadcrumb"><strong>${labels[state.view]}</strong></div><div class="topbar-actions"></div></header>${page}</main></div>`;
   function settingsPage(): string {
     const themes: Array<[ThemePreference, string]> = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']];
@@ -1931,4 +1924,5 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
     persist(); dialog.close(); render();
   }
 });
+installDemoBanner();
 void initialize();
