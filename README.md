@@ -23,6 +23,8 @@
   <img src="https://img.shields.io/badge/no-subscription%20fee-2ea043" alt="No subscription fee">
 </p>
 
+[![Dark theme on the left and light theme on the right](docs/screenshots/themes-thumb.png)](docs/screenshots/themes.png)
+
 Kestral Budget brings your monthly plan and actual spending together. Plan income, bills, savings, and everyday expenses; record transactions against your budget items; then see how real activity compares with your plan. At a glance, understand what’s allocated, what’s still available, and what can carry forward.
 
 **Make it your budget.** Add as many categories and budget items as you need, choose the sections you use, and personalize your currency, date format, theme, and layout. Run it as a standalone desktop app or self-host it. There are no subscription fees or feature paywalls.
@@ -54,10 +56,6 @@ Kestral is for people who want a hands-on monthly budget, prefer to enter and ca
 ## Screenshots
 
 Screenshots use fictional sample data. Select a preview to open its full-size image.
-
-### Dark and light themes
-
-[![Dark theme on the left and light theme on the right](docs/screenshots/themes-thumb.png)](docs/screenshots/themes.png)
 
 | Dashboard | Transactions |
 | :---: | :---: |
