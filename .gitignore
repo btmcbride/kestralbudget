@@ -10,4 +10,5 @@ assets/kestral-budget.iconset/
 !.env.example
 enhancements.md
 data/
-releaseprocess.mdsite/demo/
+releaseprocess.md
+site/demo/
