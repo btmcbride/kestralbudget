@@ -1,0 +1,2 @@
+# Keep each Store-submitted version listed so its download URL survives deployments.
+v1.2.1

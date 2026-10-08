@@ -24,9 +24,23 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npx vite build --mode demo --base /demo/ --outDir site/demo --emptyOutDir
+      - name: Stage Microsoft Store installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          while IFS= read -r tag; do
+            case "$tag" in
+              ''|\#*) continue ;;
+            esac
+            version="${tag#v}"
+            mkdir -p "site/downloads/$tag"
+            gh release download "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern "KestralBudget-Setup-${version}.exe" \
+              --dir "site/downloads/$tag"
+          done < .github/store-package-versions.txt
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
       - id: deployment
         uses: actions/deploy-pages@v4
-
