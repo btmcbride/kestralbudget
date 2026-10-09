@@ -75,7 +75,7 @@ function isBudgetState(value) {
       && (value.preferences.weekStartsOn === undefined || ['sunday', 'monday'].includes(value.preferences.weekStartsOn))
       && (value.preferences.accentColor === undefined || ['forest', 'blue', 'purple', 'amber', 'rose'].includes(value.preferences.accentColor))
       && (value.preferences.density === undefined || ['comfortable', 'compact'].includes(value.preferences.density))
-      && (value.preferences.textSize === undefined || ['small', 'medium', 'large'].includes(value.preferences.textSize))
+      && (value.preferences.textSize === undefined || ['small', 'medium', 'large', 'larger'].includes(value.preferences.textSize))
       && (value.preferences.currency === undefined || ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'NZD', 'JPY', 'CNY', 'INR', 'CHF', 'MXN', 'BRL'].includes(value.preferences.currency))
       && (value.preferences.dateFormat === undefined || ['mdy', 'dmy', 'iso'].includes(value.preferences.dateFormat))
     ));

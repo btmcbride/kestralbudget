@@ -111,7 +111,7 @@ type CarryoverMethod = 'actual' | 'planned';
 type WeekStart = 'sunday' | 'monday';
 type AccentColor = 'forest' | 'blue' | 'purple' | 'amber' | 'rose';
 type DensityPreference = 'comfortable' | 'compact';
-type TextSizePreference = 'small' | 'medium' | 'large';
+type TextSizePreference = 'small' | 'medium' | 'large' | 'larger';
 type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'CAD' | 'AUD' | 'NZD' | 'JPY' | 'CNY' | 'INR' | 'CHF' | 'MXN' | 'BRL';
 type DateFormat = 'mdy' | 'dmy' | 'iso';
 type ReportId = 'performance' | 'cashflow' | 'trends';
@@ -228,7 +228,7 @@ const DEFAULT_TRANSACTION_SORT: TransactionSortConfig = { field: 'date', directi
 const isCarryoverMethod = (value: unknown): value is CarryoverMethod => value === 'actual' || value === 'planned';
 const ACCENT_COLORS: Array<[AccentColor, string]> = [['forest', 'Forest green'], ['blue', 'Blue'], ['purple', 'Purple'], ['amber', 'Amber'], ['rose', 'Rose']];
 const DENSITIES: Array<[DensityPreference, string]> = [['comfortable', 'Comfortable'], ['compact', 'Compact']];
-const TEXT_SIZES: Array<[TextSizePreference, string]> = [['small', 'Small'], ['medium', 'Default'], ['large', 'Large']];
+const TEXT_SIZES: Array<[TextSizePreference, string]> = [['small', 'Small'], ['medium', 'Default'], ['large', 'Large'], ['larger', 'Larger']];
 const CURRENCIES: Array<[CurrencyCode, string]> = [
   ['USD', 'US dollar (USD)'], ['EUR', 'Euro (EUR)'], ['GBP', 'British pound (GBP)'], ['CAD', 'Canadian dollar (CAD)'],
   ['AUD', 'Australian dollar (AUD)'], ['NZD', 'New Zealand dollar (NZD)'], ['JPY', 'Japanese yen (JPY)'],
@@ -547,7 +547,7 @@ function applyAppearance(): void {
   const html = document.documentElement;
   html.dataset.accent = state.preferences.accentColor ?? 'forest';
   html.dataset.density = state.preferences.density ?? 'comfortable';
-  const textScales: Record<TextSizePreference, string> = { small: '0.9', medium: '1', large: '1.15' };
+  const textScales: Record<TextSizePreference, string> = { small: '0.9', medium: '1', large: '1.1', larger: '1.2' };
   html.style.setProperty('--text-scale', textScales[state.preferences.textSize ?? 'medium']);
   applyTheme();
 }
@@ -752,7 +752,7 @@ function dashboard(b: Budget, budgets: Budget[]): string {
     const diffClass = isIncome
       ? actual > planned ? 'positive' : actual < planned ? 'negative' : ''
       : actual > planned ? 'negative' : actual < planned ? 'positive' : '';
-    return `<details class="summary-disclosure" open><summary><strong>${label}</strong><span><small>Planned</small>${fmt(planned)}</span><span><small>Actual</small>${fmt(actual)}</span><span class="${diffClass}"><small>Diff</small>${signed(actual - planned)}</span></summary><div class="table-scroll"><table><colgroup><col class="summary-label-column"><col class="summary-value-column" span="3"></colgroup><thead><tr><th>${label === 'Income' ? 'INCOME SOURCE' : 'CATEGORY'}</th><th>PLANNED</th><th>ACTUAL</th><th>DIFF</th></tr></thead><tbody>${rows || `<tr><td colspan="4">No ${label.toLowerCase()} items yet.</td></tr>`}</tbody></table></div></details>`;
+    return `<details class="summary-disclosure" open><summary><strong>${label}</strong><span><small>Planned</small>${fmt(planned)}</span><span><small>Actual</small>${fmt(actual)}</span><span class="${diffClass}"><small>Diff</small>${signed(actual - planned)}</span></summary><div class="table-scroll"><table><colgroup><col class="summary-label-column"><col class="summary-value-column" span="3"></colgroup><thead><tr><th class="sr-only">${label === 'Income' ? 'INCOME SOURCE' : 'CATEGORY'}</th><th class="sr-only">PLANNED</th><th class="sr-only">ACTUAL</th><th class="sr-only">DIFF</th></tr></thead><tbody>${rows || `<tr><td colspan="4">No ${label.toLowerCase()} items yet.</td></tr>`}</tbody></table></div></details>`;
   };
   const incomeTotalActual = summary.income.actual;
   const categoryActual = summary.out.actual;

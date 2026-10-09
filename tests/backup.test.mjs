@@ -60,7 +60,7 @@ test('backup round-trips display, regional, calendar, and carryover preferences'
     weekStartsOn: 'monday',
     accentColor: 'purple',
     density: 'compact',
-    textSize: 'large',
+    textSize: 'larger',
     currency: 'EUR',
     dateFormat: 'iso',
   };
@@ -72,6 +72,10 @@ test('backup rejects invalid settings preferences', () => {
   const invalidState = structuredClone(state);
   invalidState.preferences = { ...invalidState.preferences, currency: 'FRA' };
   assert.throws(() => createBackup(invalidState));
+
+  const invalidTextSize = structuredClone(state);
+  invalidTextSize.preferences = { ...invalidTextSize.preferences, textSize: 'huge' };
+  assert.throws(() => createBackup(invalidTextSize));
 
   const invalidBudget = structuredClone(state);
   invalidBudget.budgets[0].carryoverMethod = 'future';
