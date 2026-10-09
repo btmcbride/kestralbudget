@@ -195,13 +195,21 @@ const EXPENSE_FREQUENCIES: Array<{ value: ExpenseFrequency; label: string; descr
   ...PAY_FREQUENCIES,
   { value: 'yearly', label: 'Yearly', description: 'Once per year' },
 ];
-const GUIDED_TOUR_STEPS: Array<{ selector: string; view: 'overview' | 'transactions'; title: string; body: string }> = [
-  { selector: '.budget-tabs', view: 'overview', title: 'Move between months', body: 'The month tabs switch between monthly plans. Choose + to create the next month; planned items carry forward, actuals reset, and the carryover follows your selected rule.' },
-  { selector: '.metric-grid', view: 'overview', title: 'Read your monthly totals', body: 'Compare planned and actual income plus carryover, unallocated income, and allocated income.' },
-  { selector: '.at-a-glance', view: 'overview', title: 'Review income and categories', body: 'Expand Income or Categories to see planned, actual, and difference details. Collapse either section to keep its totals visible.' },
-  { selector: '.categories-section .section-title-row', view: 'overview', title: 'Organize your plan', body: 'Categories hold your budget items. Add categories, items, or recurring expenses here.' },
-  { selector: '.transactions-panel .transaction-tools', view: 'transactions', title: 'Find and manage activity', body: 'Search and filter by budget item or category, then select visible transactions for bulk deletion.' },
-  { selector: '.sidebar .backup-actions', view: 'overview', title: 'Protect your data', body: 'Export a backup or restore your budget from a previous backup.' },
+const GUIDED_TOUR_STEPS: Array<{ selector: string; fallbackSelector?: string; view: AppState['view']; title: string; body: string }> = [
+  { selector: '.budget-tabs', view: 'dashboard', title: 'Plan month by month', body: 'Switch between monthly budgets or add a month. Planned items carry forward, actuals start fresh, and the new month uses your selected carryover rule.' },
+  { selector: '.metric-grid', view: 'dashboard', title: 'See what is available', body: 'Compare planned and actual income, carryover, unallocated income, and the amount assigned across your categories.' },
+  { selector: '.at-a-glance .summary-disclosure', view: 'dashboard', title: 'Check your monthly summary', body: 'Expand Income and Categories to compare planned amounts, actuals, and differences. Top spending highlights the largest recorded expenses.' },
+  { selector: '.categories-section .section-title-row', view: 'dashboard', title: 'Build your budget plan', body: 'Create categories and add budget items for income, bills, expenses, subscriptions, debts, or savings. Items keep planned amounts separate from recorded activity.' },
+  { selector: '.entry-line', fallbackSelector: '.categories-section .section-title-row', view: 'dashboard', title: 'Review and edit an item', body: 'Click a budget item to open its history, then edit a transaction there if needed. Use the separate pencil button to update the budget item.' },
+  { selector: '.category-card[data-category-group="savings"]', fallbackSelector: '.categories-section .section-title-row', view: 'dashboard', title: 'Set savings goals', body: 'If you use the Savings section, give an item one or more named goals with target amounts. Add deposits to track progress, and open the savings item to review its goals and deposits.' },
+  { selector: '.categories-section .sub-category-actions [data-action="add-expense-schedule"]', fallbackSelector: '.categories-section .section-title-row', view: 'dashboard', title: 'Schedule recurring expenses', body: 'Use Schedule item beside a category to create weekly, biweekly, monthly, or yearly planned expenses. Manage schedules later from Subscription Tracking.' },
+  { selector: '.transactions-panel .transaction-tools', view: 'transactions', title: 'Find transactions', body: 'Search descriptions or dates, filter by category or budget item, and sort activity. Select visible transactions to manage several at once.' },
+  { selector: '.transactions-panel .panel-heading-actions', view: 'transactions', title: 'Record and manage activity', body: 'Add an income or expense transaction here. Edit or delete individual rows in the table, or use the selection controls to delete multiple transactions.' },
+  { selector: '.subscription-page .page-heading .heading-actions', view: 'subscriptions', title: 'Track upcoming renewals', body: 'See subscription due dates on the monthly calendar and review the monthly cost estimate. Add subscriptions here, or manage, pause, and update recurring schedules.' },
+  { selector: '.review-stats', view: 'review', title: 'Review the month', body: 'Compare recorded income and spending with your plan, see what remains after actuals, and identify categories that are over or under plan.' },
+  { selector: '.report-choice-card', fallbackSelector: '.report-page .page-heading', view: 'reports', title: 'Explore reports', body: 'Run Budget Performance, Cash Flow & Leftover Income, or Spending Trends. Reports can compare the months available in your budget series.' },
+  { selector: '.settings-page-heading', view: 'settings', title: 'Make the app yours', body: 'Choose a theme, accent, text size, and layout density. Set currency and date formats, the calendar week start, and how carryover is calculated.' },
+  { selector: '.sidebar .backup-actions', view: 'dashboard', title: 'Keep a backup', body: 'Export a backup file or import one to restore or move budget data. Backups are manual, so keep a copy somewhere safe.' },
 ];
 const payFrequencyInterval = (frequency: PayFrequency): number => ({ weekly: 7, biweekly: 14, monthly: 30 }[frequency] ?? 14);
 const expenseFrequencyInterval = (frequency: ExpenseFrequency): number => frequency === 'yearly' ? 365 : payFrequencyInterval(frequency);
@@ -319,6 +327,7 @@ const state: AppState = { budgets: [], active: null, view: 'dashboard', preferen
 let wizard: WizardState | null = null;
 let guidedTourStep = 0;
 let guidedTourLayer: HTMLElement | null = null;
+let guidedTourPositionFrame: number | undefined;
 let dashboardTab: 'overview' | 'transactions' = 'overview';
 let activeReport: ReportId | null = null;
 let reportStartMonth: string | null = null;
@@ -615,10 +624,67 @@ function render(): void {
   applyTransactionFilters();
 }
 function setupCompleteDialog(): void {
-  dialog.innerHTML = '<section class="tour-content"><div class="dialog-topline"><span class="dialog-icon">✓</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">BUDGET SETUP COMPLETE</p><h2>Your budget is ready</h2><p class="dialog-copy">Take a quick guided tour of the overview, categories, and transactions, or start exploring on your own.</p><div class="dialog-actions"><button class="button button-secondary" data-action="setup-finish" type="button">Maybe later</button><button class="button button-primary" data-action="guided-tour" type="button">Take a guided tour</button></div></section>';
+  dialog.innerHTML = '<section class="tour-content"><div class="dialog-topline"><span class="dialog-icon">✓</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">BUDGET SETUP COMPLETE</p><h2>Your budget is ready</h2><p class="dialog-copy">Take a tour of monthly planning, item history and editing, savings goals, transactions, recurring expenses, reviews, reports, and settings, or start exploring on your own.</p><div class="dialog-actions"><button class="button button-secondary" data-action="setup-finish" type="button">Maybe later</button><button class="button button-primary" data-action="guided-tour" type="button">Take a guided tour</button></div></section>';
   dialog.showModal();
 }
+function guidedTourTarget(): HTMLElement | null {
+  const currentStep = GUIDED_TOUR_STEPS[guidedTourStep];
+  return root.querySelector<HTMLElement>(currentStep.selector)
+    || (currentStep.fallbackSelector ? root.querySelector<HTMLElement>(currentStep.fallbackSelector) : null)
+    || root.querySelector<HTMLElement>('.topbar');
+}
+function updateGuidedTourPosition(): void {
+  if (!guidedTourLayer) return;
+  const target = guidedTourTarget();
+  if (!target) return;
+  const spotlight = requiredElement<HTMLElement>(guidedTourLayer, '.tour-spotlight');
+  const callout = requiredElement<HTMLElement>(guidedTourLayer, '.tour-callout');
+  const rect = target.getBoundingClientRect();
+  const padding = 5;
+  const left = Math.max(4, rect.left - padding);
+  const top = Math.max(4, rect.top - padding);
+  const right = Math.min(window.innerWidth - 4, rect.right + padding);
+  const bottom = Math.min(window.innerHeight - 4, rect.bottom + padding);
+  spotlight.style.left = `${left}px`;
+  spotlight.style.top = `${top}px`;
+  spotlight.style.width = `${Math.max(0, right - left)}px`;
+  spotlight.style.height = `${Math.max(0, bottom - top)}px`;
+  const calloutWidth = Math.min(390, window.innerWidth - 32);
+  callout.style.width = `${calloutWidth}px`;
+  const calloutHeight = callout.offsetHeight;
+  const maxLeft = Math.max(16, window.innerWidth - calloutWidth - 16);
+  const calloutLeft = Math.min(Math.max(16, rect.left), maxLeft);
+  const usableBottom = window.innerHeight - 88;
+  const below = rect.bottom + 14;
+  const above = rect.top - calloutHeight - 14;
+  const desiredTop = below + calloutHeight <= window.innerHeight - 16
+    ? Math.min(below, usableBottom - calloutHeight)
+    : above >= 16
+      ? above
+      : (usableBottom - calloutHeight) / 2;
+  const maxTop = Math.max(16, usableBottom - calloutHeight);
+  callout.style.left = `${calloutLeft}px`;
+  callout.style.top = `${Math.min(Math.max(16, desiredTop), maxTop)}px`;
+}
+function scheduleGuidedTourPosition(): void {
+  if (guidedTourPositionFrame !== undefined) return;
+  guidedTourPositionFrame = window.requestAnimationFrame(() => {
+    guidedTourPositionFrame = undefined;
+    updateGuidedTourPosition();
+  });
+}
+function advanceGuidedTour(): void {
+  if (guidedTourStep === GUIDED_TOUR_STEPS.length - 1) finishGuidedTour();
+  else showGuidedTour(guidedTourStep + 1);
+}
+function retreatGuidedTour(): void {
+  if (guidedTourStep > 0) showGuidedTour(guidedTourStep - 1);
+}
 function finishGuidedTour(): void {
+  window.removeEventListener('resize', scheduleGuidedTourPosition);
+  document.removeEventListener('scroll', scheduleGuidedTourPosition, true);
+  if (guidedTourPositionFrame !== undefined) window.cancelAnimationFrame(guidedTourPositionFrame);
+  guidedTourPositionFrame = undefined;
   guidedTourLayer?.remove();
   guidedTourLayer = null;
   root.inert = false;
@@ -628,13 +694,13 @@ function showGuidedTour(step = 0): void {
   guidedTourStep = Math.max(0, Math.min(step, GUIDED_TOUR_STEPS.length - 1));
   const currentStep = GUIDED_TOUR_STEPS[guidedTourStep];
   if (dialog.open) dialog.close();
-  const tourView = currentStep.view === 'transactions' ? 'transactions' : 'dashboard';
+  const tourView = currentStep.view;
   if (state.view !== tourView) {
     state.view = tourView;
-    dashboardTab = currentStep.view;
+    if (tourView === 'dashboard' || tourView === 'transactions') dashboardTab = tourView === 'transactions' ? 'transactions' : 'overview';
     render();
   }
-  const target = root.querySelector<HTMLElement>(currentStep.selector) || root.querySelector<HTMLElement>('.topbar');
+  const target = guidedTourTarget();
   if (!target) return;
   target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   root.inert = true;
@@ -643,28 +709,12 @@ function showGuidedTour(step = 0): void {
     guidedTourLayer.className = 'guided-tour-layer';
     guidedTourLayer.innerHTML = '<div class="tour-spotlight"></div><section class="tour-callout" role="dialog" aria-modal="true" aria-labelledby="tour-title"></section>';
     document.body.append(guidedTourLayer);
+    window.addEventListener('resize', scheduleGuidedTourPosition);
+    document.addEventListener('scroll', scheduleGuidedTourPosition, true);
   }
-  const spotlight = requiredElement<HTMLElement>(guidedTourLayer, '.tour-spotlight');
   const callout = requiredElement<HTMLElement>(guidedTourLayer, '.tour-callout');
-  callout.innerHTML = `<div class="tour-callout-head"><span class="tour-step-count">${guidedTourStep + 1} / ${GUIDED_TOUR_STEPS.length}</span><button class="tour-close" type="button" data-action="tour-finish" aria-label="Close tour">×</button></div><div class="tour-progress" aria-hidden="true">${GUIDED_TOUR_STEPS.map((_, index) => `<span class="${index <= guidedTourStep ? 'done' : ''}"></span>`).join('')}</div><h2 id="tour-title">${esc(currentStep.title)}</h2><p>${esc(currentStep.body)}</p><div class="tour-callout-actions"><button class="button button-secondary" data-action="tour-finish" type="button">Skip tour</button><button class="button button-secondary" data-action="tour-previous" type="button" ${guidedTourStep === 0 ? 'disabled' : ''}>Back</button><button class="button button-primary" data-action="tour-next" type="button">${guidedTourStep === GUIDED_TOUR_STEPS.length - 1 ? 'Finish' : 'Next'}</button></div>`;
-  const rect = target.getBoundingClientRect();
-  const padding = 5;
-  spotlight.style.left = `${Math.max(4, rect.left - padding)}px`;
-  spotlight.style.top = `${Math.max(4, rect.top - padding)}px`;
-  spotlight.style.width = `${Math.min(window.innerWidth - Math.max(4, rect.left - padding) - 4, rect.width + padding * 2)}px`;
-  spotlight.style.height = `${Math.min(window.innerHeight - Math.max(4, rect.top - padding) - 4, rect.height + padding * 2)}px`;
-  const calloutWidth = Math.min(390, window.innerWidth - 32);
-  callout.style.width = `${calloutWidth}px`;
-  const calloutHeight = callout.offsetHeight;
-  const left = Math.min(Math.max(16, rect.left), window.innerWidth - calloutWidth - 16);
-  const below = rect.bottom + 14;
-  const top = below + calloutHeight <= window.innerHeight - 16
-    ? below
-    : rect.top - calloutHeight - 14 >= 16
-      ? rect.top - calloutHeight - 14
-      : Math.max(16, (window.innerHeight - calloutHeight) / 2);
-  callout.style.left = `${left}px`;
-  callout.style.top = `${top}px`;
+  callout.innerHTML = `<div class="tour-callout-head"><span class="tour-step-count">${guidedTourStep + 1} / ${GUIDED_TOUR_STEPS.length}</span><button class="tour-close" type="button" data-action="tour-finish" aria-label="Close tour" aria-keyshortcuts="Escape">×</button></div><div class="tour-progress" style="--tour-step-count:${GUIDED_TOUR_STEPS.length}" aria-hidden="true">${GUIDED_TOUR_STEPS.map((_, index) => `<span class="${index <= guidedTourStep ? 'done' : ''}"></span>`).join('')}</div><h2 id="tour-title">${esc(currentStep.title)}</h2><p>${esc(currentStep.body)}</p><div class="tour-callout-actions" role="group" aria-label="Tour navigation"><span class="tour-shortcut-hint">← / → or Enter to navigate · Esc to close</span><button class="button button-secondary" data-action="tour-finish" type="button" aria-keyshortcuts="Escape">Skip tour</button><button class="button button-secondary" data-action="tour-previous" type="button" aria-keyshortcuts="ArrowLeft" ${guidedTourStep === 0 ? 'disabled' : ''}>Back</button><button class="button button-primary" data-action="tour-next" type="button" aria-keyshortcuts="ArrowRight Enter">${guidedTourStep === GUIDED_TOUR_STEPS.length - 1 ? 'Finish' : 'Next'}</button></div>`;
+  updateGuidedTourPosition();
   callout.querySelector<HTMLButtonElement>('[data-action="tour-next"]')?.focus();
 }
 function welcome(): string {
@@ -1136,7 +1186,7 @@ function categoryCard(g: BudgetGroup, budget: Budget): string {
       return `<div class="sub-category"><div class="sub-category-title"><span>${esc(category.name)}</span><span class="sub-category-actions"><button class="text-action" data-action="add-entry" data-category="${esc(category.id)}">Add item</button>${g.id === 'income' ? '' : `<button class="text-action" data-action="add-expense-schedule" data-category="${esc(category.id)}">Schedule item</button>`}</span></div>${itemRows}</div>`;
     }).join('')
     : `<div class="first-category"><span>No ${esc(g.name.toLowerCase())} categories yet</span><button class="text-action" data-action="add-category" data-type="${esc(g.id)}">Create one</button></div>`;
-  return `<section class="category-card"><header class="category-header"><span class="category-symbol ${g.color}">${symbol}</span><div class="category-heading"><h3>${esc(g.name)}</h3><span>${entries.length} ${entries.length === 1 ? 'item' : 'items'}</span></div><div class="category-total"><strong>${fmt(planned)}</strong><small>planned</small></div></header><div class="category-progress"><span class="${actual > planned && g.id !== 'income' ? 'over-budget' : ''}" style="width:${planned ? Math.min(100, actual / planned * 100) : (actual ? 100 : 0)}%"></span></div>${body}<footer class="category-footer"><span>Actual ${fmt(actual)}</span><span class="${differenceClass}">${signed(actual - planned)} diff</span></footer></section>`;
+  return `<section class="category-card" data-category-group="${esc(g.id)}"><header class="category-header"><span class="category-symbol ${g.color}">${symbol}</span><div class="category-heading"><h3>${esc(g.name)}</h3><span>${entries.length} ${entries.length === 1 ? 'item' : 'items'}</span></div><div class="category-total"><strong>${fmt(planned)}</strong><small>planned</small></div></header><div class="category-progress"><span class="${actual > planned && g.id !== 'income' ? 'over-budget' : ''}" style="width:${planned ? Math.min(100, actual / planned * 100) : (actual ? 100 : 0)}%"></span></div>${body}<footer class="category-footer"><span>Actual ${fmt(actual)}</span><span class="${differenceClass}">${signed(actual - planned)} diff</span></footer></section>`;
 }
 
 function open(content: string): void { dialog.innerHTML = content; if (!dialog.open) dialog.showModal(); }
@@ -1609,12 +1659,8 @@ document.addEventListener('click', (event: MouseEvent) => {
   if (action === 'guided-tour') { showGuidedTour(); return; }
   if (action === 'setup-finish') { dialog.close(); return; }
   if (action === 'tour-finish') { finishGuidedTour(); return; }
-  if (action === 'tour-previous') { showGuidedTour(guidedTourStep - 1); return; }
-  if (action === 'tour-next') {
-    if (guidedTourStep === GUIDED_TOUR_STEPS.length - 1) finishGuidedTour();
-    else showGuidedTour(guidedTourStep + 1);
-    return;
-  }
+  if (action === 'tour-previous') { retreatGuidedTour(); return; }
+  if (action === 'tour-next') { advanceGuidedTour(); return; }
   if (action === 'export-backup') exportBackup();
   if (action === 'import-backup') requiredElement<HTMLInputElement>(root, '#backup-file').click();
   if (action === 'new-budget') newBudgetDialog();
@@ -1775,6 +1821,18 @@ document.addEventListener('click', (event: MouseEvent) => {
   }
 });
 document.addEventListener('keydown', (event: KeyboardEvent) => {
+  if (guidedTourLayer && !event.altKey && !event.ctrlKey && !event.metaKey) {
+    if (event.key === 'ArrowRight' || event.key === 'Enter') {
+      event.preventDefault();
+      advanceGuidedTour();
+      return;
+    }
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      retreatGuidedTour();
+      return;
+    }
+  }
   if (event.key === 'Escape' && document.body.classList.contains('mobile-nav-open')) {
     document.body.classList.remove('mobile-nav-open');
     root.querySelector<HTMLButtonElement>('.mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
