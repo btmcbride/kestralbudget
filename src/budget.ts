@@ -10,6 +10,7 @@ import './budget-feedback.css';
 import { buildExpenseEntriesForMonth, buildIncomeEntriesForMonth, type ExpenseFrequency } from './paycheck-scheduler.js';
 import { createBackup, parseBackup } from './backup.js';
 import { IS_DEMO, fetchState, sendState, installDemoBanner } from './state-api.js';
+import { allSavingsGoalsMet, savingsGoalProgress, type SavingsGoal } from './savings-goals.js';
 
 const KEY = 'cryptic-budgets.v1';
 const GROUPS: StandardBudgetGroup[] = [
@@ -62,6 +63,7 @@ interface BudgetEntry {
   name: string;
   planned: number;
   actual: number;
+  goals?: SavingsGoal[];
   dueDate?: string;
   scheduleId?: string | null;
   scheduledDate?: string;
@@ -74,6 +76,7 @@ interface BudgetTransaction {
   amount: number;
   categoryId: string;
   entryId: string | null;
+  savingsGoalId?: string | null;
 }
 
 interface BudgetCategory {
@@ -1060,6 +1063,9 @@ function updateTransactionSelectionUI(): void {
 }
 function categoryCard(g: BudgetGroup, budget: Budget): string {
   const cats = budget.categories.filter((c) => c.type === g.id);
+  const savingsTransactions = g.id === 'savings'
+    ? seriesBudgets(budget.seriesId).flatMap((month) => month.transactions)
+    : budget.transactions;
   const entries = cats.flatMap((c) => c.entries);
   const groupTotal = cats.reduce((total, category) => {
     const categoryAmount = categoryTotals(budget, category);
@@ -1078,11 +1084,13 @@ function categoryCard(g: BudgetGroup, budget: Budget): string {
       const itemRows = category.entries.length
         ? `<div class="entry-columns" aria-hidden="true"><span></span><span>Due date</span><span>Planned</span><span>Actual</span></div>${category.entries.map((entry) => {
           const actualForEntry = entryActual(budget, entry);
+          const goals = entry.goals ?? [];
+          const goalsMet = g.id === 'savings' && allSavingsGoalsMet(goals, savingsTransactions);
           const expenseSchedule = budget.expenseSchedules.find((item) => item.id === entry.scheduleId);
           const dueLabel = expenseSchedule
             ? `${PAY_FREQUENCIES.find((item) => item.value === expenseSchedule.frequency)?.label ?? 'Recurring'} · ${displayDate(entry.scheduledDate ?? expenseSchedule.nextDueDate)}`
             : entry.dueDate ? displayDate(entry.dueDate) : '';
-          return `<button class="entry-row" data-action="edit-entry" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" aria-label="${esc(entry.name)}${dueLabel ? `: due ${dueLabel}` : ''}, planned ${fmt(entry.planned)}, actual ${fmt(actualForEntry)}"><span class="entry-name">${esc(entry.name)}</span><span class="entry-due">${esc(dueLabel)}</span><span class="entry-planned">${fmt(entry.planned)}</span><span class="entry-actual ${actualForEntry > +entry.planned && g.id !== 'income' ? 'negative' : ''}">${fmt(actualForEntry)}</span></button>`;
+          return `<button class="entry-row ${goalsMet ? 'savings-goals-met' : ''}" data-action="${g.id === 'savings' ? 'savings-details' : 'edit-entry'}" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" aria-label="${esc(entry.name)}${dueLabel ? `: due ${dueLabel}` : ''}, planned ${fmt(entry.planned)}, actual ${fmt(actualForEntry)}${goalsMet ? ', all savings goals met' : ''}"><span class="entry-name">${esc(entry.name)}${goalsMet ? '<span class="savings-goal-badge">✓ Goals met</span>' : ''}</span><span class="entry-due">${esc(dueLabel)}</span><span class="entry-planned">${fmt(entry.planned)}</span><span class="entry-actual ${actualForEntry > +entry.planned && g.id !== 'income' ? 'negative' : ''}">${fmt(actualForEntry)}</span></button>`;
         }).join('')}`
         : '<p class="category-empty">Nothing added yet</p>';
       return `<div class="sub-category"><div class="sub-category-title"><span>${esc(category.name)}</span><span class="sub-category-actions"><button class="text-action" data-action="add-entry" data-category="${esc(category.id)}">Add item</button>${g.id === 'income' ? '' : `<button class="text-action" data-action="add-expense-schedule" data-category="${esc(category.id)}">Schedule item</button>`}</span></div>${itemRows}</div>`;
@@ -1365,13 +1373,28 @@ function transactionItemOptions(categoryId: string, selectedEntryId: string | nu
   const category = current()?.categories.find((item) => item.id === categoryId);
   return `<option value="" ${selectedEntryId ? '' : 'selected'}>Category only</option>${category?.entries.map((entry) => `<option value="${esc(entry.id)}" ${entry.id === selectedEntryId ? 'selected' : ''}>${esc(entry.name)}</option>`).join('') ?? ''}`;
 }
-function transactionDialog(transaction: BudgetTransaction | null = null, duplicate = false): void {
+function transactionGoalOptions(categoryId: string, entryId: string | null, selectedGoalId: string | null = null): string {
+  const entry = current()?.categories.find((category) => category.id === categoryId)?.entries.find((item) => item.id === entryId);
+  return `<option value="">Unassigned</option>${(entry?.goals ?? []).map((goal) => `<option value="${esc(goal.id)}" ${goal.id === selectedGoalId ? 'selected' : ''}>${esc(goal.name)}</option>`).join('')}`;
+}
+function updateTransactionGoalField(): void {
+  const categoryId = requiredElement<HTMLSelectElement>(dialog, '#transaction-category').value;
+  const entryId = requiredElement<HTMLSelectElement>(dialog, '#transaction-entry').value || null;
+  const category = current()?.categories.find((item) => item.id === categoryId);
+  const entry = category?.entries.find((item) => item.id === entryId);
+  const field = requiredElement<HTMLElement>(dialog, '#transaction-savings-goal-field');
+  const select = requiredElement<HTMLSelectElement>(dialog, '#transaction-savings-goal');
+  field.hidden = category?.type !== 'savings' || !entry;
+  select.innerHTML = transactionGoalOptions(categoryId, entryId, select.value || null);
+}
+function transactionDialog(transaction: BudgetTransaction | null = null, duplicate = false, categoryId?: string, entryId?: string): void {
   const budget = current();
   if (!budget || budget.categories.length === 0) return;
-  const selectedCategoryId = transaction?.categoryId ?? budget.categories[0].id;
+  const selectedCategoryId = transaction?.categoryId ?? categoryId ?? budget.categories[0].id;
   const today = new Date();
   const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  open(`<form class="dialog-form" data-form="transaction" data-transaction="${esc(transaction?.id ?? '')}"><div class="dialog-topline"><span class="dialog-icon">${transaction ? '↗' : '＋'}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">${transaction ? 'UPDATE RECORDED ACTIVITY' : 'RECORD ACTUAL ACTIVITY'}</p><h2>${transaction ? 'Edit transaction' : 'Add transaction'}</h2><label for="transaction-date">Date</label><input id="transaction-date" name="date" type="date" value="${esc(transaction?.date ?? todayString)}" required><label for="transaction-description">Description</label><input id="transaction-description" name="description" maxlength="100" value="${esc(transaction?.description ?? '')}" placeholder="e.g. Grocery store" required><label for="transaction-amount">Amount</label><div class="input-money"><span>$</span><input id="transaction-amount" name="amount" type="number" min="0.01" step="0.01" value="${transaction ? esc(transaction.amount) : ''}" placeholder="0.00" required></div><label for="transaction-category">Budget category</label><select id="transaction-category" name="categoryId" required>${budget.categories.map((category) => `<option value="${esc(category.id)}" ${category.id === selectedCategoryId ? 'selected' : ''}>${esc(category.name)} · ${esc(group(category.type).name)}</option>`).join('')}</select><label for="transaction-entry">Budget item <span>(optional)</span></label><select id="transaction-entry" name="entryId">${transactionItemOptions(selectedCategoryId, transaction?.entryId ?? null)}</select><div class="dialog-actions">${transaction ? '<button class="button button-danger" data-action="delete-transaction" data-transaction="' + esc(transaction.id) + '" type="button">Delete</button>' : '<span></span>'}<button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">${transaction ? 'Save changes' : 'Add transaction'}</button></div></form>`);
+  const selectedEntryId = transaction?.entryId ?? entryId ?? null;
+  open(`<form class="dialog-form" data-form="transaction" data-transaction="${esc(transaction?.id ?? '')}"><div class="dialog-topline"><span class="dialog-icon">${transaction ? '↗' : '＋'}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">${transaction ? 'UPDATE RECORDED ACTIVITY' : 'RECORD ACTUAL ACTIVITY'}</p><h2>${transaction ? 'Edit transaction' : 'Add transaction'}</h2><label for="transaction-date">Date</label><input id="transaction-date" name="date" type="date" value="${esc(transaction?.date ?? todayString)}" required><label for="transaction-description">Description</label><input id="transaction-description" name="description" maxlength="100" value="${esc(transaction?.description ?? '')}" placeholder="e.g. Grocery store" required><label for="transaction-amount">Amount</label><div class="input-money"><span>$</span><input id="transaction-amount" name="amount" type="number" min="0.01" step="0.01" value="${transaction ? esc(transaction.amount) : ''}" placeholder="0.00" required></div><label for="transaction-category">Budget category</label><select id="transaction-category" name="categoryId" required>${budget.categories.map((category) => `<option value="${esc(category.id)}" ${category.id === selectedCategoryId ? 'selected' : ''}>${esc(category.name)} · ${esc(group(category.type).name)}</option>`).join('')}</select><label for="transaction-entry">Budget item <span>(optional)</span></label><select id="transaction-entry" name="entryId">${transactionItemOptions(selectedCategoryId, selectedEntryId)}</select><div id="transaction-savings-goal-field" ${budget.categories.find((category) => category.id === selectedCategoryId)?.type === 'savings' && selectedEntryId ? '' : 'hidden'}><label for="transaction-savings-goal">Savings goal <span>(optional)</span></label><select id="transaction-savings-goal" name="savingsGoalId">${transactionGoalOptions(selectedCategoryId, selectedEntryId, transaction?.savingsGoalId ?? null)}</select></div><div class="dialog-actions">${transaction ? '<button class="button button-danger" data-action="delete-transaction" data-transaction="' + esc(transaction.id) + '" type="button">Delete</button>' : '<span></span>'}<button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">${transaction ? 'Save changes' : 'Add transaction'}</button></div></form>`);
   if (transaction && duplicate) {
     requiredElement<HTMLFormElement>(dialog, 'form').dataset.transaction = '';
     requiredElement<HTMLElement>(dialog, '.panel-kicker').textContent = 'CREATE A COPY OF RECORDED ACTIVITY';
@@ -1388,6 +1411,42 @@ function transactionDialog(transaction: BudgetTransaction | null = null, duplica
     requiredElement<HTMLElement>(dialog, '.dialog-topline').insertBefore(duplicateButton, requiredElement(dialog, '.dialog-close'));
   }
   requiredElement<HTMLInputElement>(dialog, '#transaction-description').focus();
+}
+function savingsDetailsDialog(categoryId: string, entryId: string, showGoalForm = false): void {
+  const budget = current();
+  const category = budget?.categories.find((item) => item.id === categoryId);
+  const entry = category?.entries.find((item) => item.id === entryId);
+  if (!budget || !category || category.type !== 'savings' || !entry) return;
+  const goals = entry.goals ?? [];
+  const savingsTransactions = seriesBudgets(budget.seriesId).flatMap((month) => month.transactions);
+  const goalIds = new Set(goals.map((goal) => goal.id));
+  const transactions = savingsTransactions.filter((transaction) => transaction.entryId === entry.id
+    || (transaction.savingsGoalId && goalIds.has(transaction.savingsGoalId)))
+    .sort((left, right) => right.date.localeCompare(left.date));
+  const met = allSavingsGoalsMet(goals, savingsTransactions);
+  const transactionRows = transactions.length
+    ? transactions.map((transaction) => {
+      const goalName = goals.find((goal) => goal.id === transaction.savingsGoalId)?.name ?? 'Unassigned';
+      const editButton = budget.transactions.some((item) => item.id === transaction.id)
+        ? `<button class="text-action" type="button" data-action="edit-transaction" data-transaction="${esc(transaction.id)}">Edit</button>`
+        : '';
+      return `<div class="savings-transaction"><span><strong>${esc(transaction.description)}</strong><small>${esc(displayDate(transaction.date))} · ${esc(goalName)}</small></span><strong>${fmt(transaction.amount)}</strong>${editButton}</div>`;
+    }).join('')
+    : '<p class="savings-empty">No deposits recorded for this item yet.</p>';
+  const goalRows = goals.length
+    ? goals.map((goal) => {
+      const progress = savingsGoalProgress(goal, savingsTransactions);
+      const percent = Math.min(100, goal.target > 0 ? progress.saved / goal.target * 100 : 0);
+      return `<article class="savings-goal ${progress.met ? 'is-met' : ''}"><div class="savings-goal-heading"><strong>${esc(goal.name)}</strong><span>${progress.met ? '✓ Goal met' : `${fmt(progress.remaining)} to go`}</span></div><div class="savings-goal-progress" role="progressbar" aria-label="${esc(goal.name)} progress" aria-valuemin="0" aria-valuemax="${esc(goal.target)}" aria-valuenow="${esc(Math.min(goal.target, progress.saved))}"><span style="width:${percent}%"></span></div><small>${fmt(progress.saved)} saved of ${fmt(goal.target)}</small><button class="text-action transaction-delete" type="button" data-action="delete-savings-goal" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}" data-goal="${esc(goal.id)}">Remove goal</button></article>`;
+    }).join('')
+    : '<p class="savings-empty">No goals yet. Add an optional goal to start tracking progress.</p>';
+  const prompt = met
+    ? `<p class="savings-complete" role="status">You’ve met all your savings goals. Would you like to set a new goal?</p><button class="button button-secondary" type="button" data-action="show-savings-goal-form" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}">Set a new goal</button>`
+    : goals.length ? `<button class="button button-secondary" type="button" data-action="show-savings-goal-form" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}">Add another goal</button>` : '';
+  const goalForm = showGoalForm || goals.length === 0
+    ? `<form class="savings-goal-form" data-form="savings-goal" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}"><label for="savings-goal-name">Goal name</label><input id="savings-goal-name" name="name" maxlength="80" placeholder="e.g. Emergency fund" required><label for="savings-goal-target">Target amount</label><div class="input-money"><span>$</span><input id="savings-goal-target" name="target" type="number" min="0.01" step="0.01" placeholder="0.00" required></div><div class="dialog-actions"><button class="button button-primary" type="submit">Add goal</button></div></form>`
+    : '';
+  open(`<section class="savings-details"><div class="dialog-topline"><span class="dialog-icon">◈</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">SAVINGS DETAILS</p><h2>${esc(entry.name)}</h2><div class="savings-section"><div class="savings-section-heading"><h3>Goals</h3>${prompt}</div>${goalRows}${goalForm}</div><div class="savings-section"><h3>Deposits</h3>${transactionRows}</div><div class="dialog-actions"><button class="button button-secondary" type="button" data-action="edit-entry" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}">Edit item</button><button class="button button-secondary" type="button" data-action="new-transaction" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}">Add deposit</button><button class="button button-secondary" type="button" data-action="close">Close</button></div></section>`);
 }
 function categoryDialog(type: string = 'expenses'): void {
   const customType = type.startsWith('custom:');
@@ -1415,7 +1474,7 @@ document.addEventListener('click', (event: MouseEvent) => {
   const openBudgetMenu = root.querySelector<HTMLDetailsElement>('.budget-menu[open]');
   if (openBudgetMenu && !openBudgetMenu.contains(event.target)) openBudgetMenu.open = false;
   const button = event.target.closest<HTMLButtonElement>('[data-action]'); if (!button) return;
-  const { action, id, category, type, entry, transaction, schedule } = button.dataset;
+  const { action, id, category, type, entry, transaction, schedule, goal } = button.dataset;
   if (action === 'toggle-sidebar') {
     const isOpen = document.body.classList.toggle('mobile-nav-open');
     button.setAttribute('aria-expanded', String(isOpen));
@@ -1510,7 +1569,7 @@ document.addEventListener('click', (event: MouseEvent) => {
     }
   }
   if (action === 'delete-month') deleteCurrentMonth();
-  if (action === 'new-transaction') transactionDialog();
+  if (action === 'new-transaction') transactionDialog(null, false, category, entry);
   if (action === 'toggle-transaction-sort-direction') {
     const sort = transactionSortConfig();
     setTransactionSort(sort.field, sort.direction === 'asc' ? 'desc' : 'asc');
@@ -1527,6 +1586,21 @@ document.addEventListener('click', (event: MouseEvent) => {
   if (action === 'select-month' && id) { state.active = id; persist(); render(); }
   if (action === 'add-category') categoryDialog(type || 'expenses');
   if (action === 'add-entry') entryDialog(category || '', type || 'expenses');
+  if (action === 'savings-details' && category && entry) savingsDetailsDialog(category, entry);
+  if (action === 'show-savings-goal-form' && category && entry) savingsDetailsDialog(category, entry, true);
+  if (action === 'delete-savings-goal' && category && entry && goal) {
+    const budget = current();
+    const savingsEntry = budget?.categories.find((item) => item.id === category)?.entries.find((item) => item.id === entry);
+    if (budget && savingsEntry && window.confirm('Remove this savings goal? Its deposits will remain recorded as unassigned.')) {
+      for (const month of seriesBudgets(budget.seriesId)) {
+        month.categories.forEach((item) => item.entries.forEach((budgetEntry) => {
+          budgetEntry.goals = (budgetEntry.goals ?? []).filter((item) => item.id !== goal);
+        }));
+        month.transactions.forEach((item) => { if (item.savingsGoalId === goal) item.savingsGoalId = null; });
+      }
+      persist(); render(); savingsDetailsDialog(category, entry);
+    }
+  }
   if (action === 'add-expense-schedule' && category) expenseScheduleDialog(category);
   if (action === 'schedule-subscription' && category && entry) {
     const budget = current();
@@ -1751,6 +1825,9 @@ dialog.addEventListener('change', (event: Event) => {
     requiredElement<HTMLInputElement>(dialog, '#custom-type').required = custom;
   } else if (target.id === 'transaction-category') {
     requiredElement<HTMLSelectElement>(dialog, '#transaction-entry').innerHTML = transactionItemOptions(target.value);
+    updateTransactionGoalField();
+  } else if (target.id === 'transaction-entry') {
+    updateTransactionGoalField();
   } else if (target.id === 'entry-category') {
     const budget = current();
     const selectedCategory = budget?.categories.find((item) => item.id === target.value);
@@ -1896,7 +1973,12 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
     const date = String(data.get('date') ?? '');
     const category = budget.categories.find((item) => item.id === categoryId);
     if (!category || (entryId && !category.entries.some((item) => item.id === entryId)) || !description || !date || amount <= 0) return;
-    const transaction: BudgetTransaction = { id: form.dataset.transaction || uid(), date, description, amount, categoryId, entryId };
+    const selectedGoalId = String(data.get('savingsGoalId') ?? '') || null;
+    const selectedEntry = category.entries.find((item) => item.id === entryId);
+    const savingsGoalId = category.type === 'savings' && selectedEntry?.goals?.some((goal) => goal.id === selectedGoalId)
+      ? selectedGoalId
+      : null;
+    const transaction: BudgetTransaction = { id: form.dataset.transaction || uid(), date, description, amount, categoryId, entryId, savingsGoalId };
     const existingIndex = budget.transactions.findIndex((item) => item.id === transaction.id);
     if (existingIndex >= 0) budget.transactions[existingIndex] = transaction;
     else budget.transactions.push(transaction);
@@ -1940,6 +2022,17 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
     const customName = String(data.get('customType') || '').trim();
     const type = (data.get('type') === 'custom' ? `custom:${customName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : String(data.get('type'))) as BudgetGroupId;
     b.categories.push({ id: uid(), type, ...(customName ? { typeName: customName } : {}), name: String(data.get('name')).trim(), entries: [] }); persist(); dialog.close(); render();
+  } else if (form.dataset.form === 'savings-goal') {
+    const budget = current();
+    const categoryId = form.dataset.category;
+    const entryId = form.dataset.entry;
+    const category = budget?.categories.find((item) => item.id === categoryId);
+    const savingsEntry = category?.entries.find((item) => item.id === entryId);
+    const name = String(data.get('name') ?? '').trim();
+    const target = Number(data.get('target'));
+    if (!budget || category?.type !== 'savings' || !savingsEntry || !name || !Number.isFinite(target) || target <= 0) return;
+    savingsEntry.goals = [...(savingsEntry.goals ?? []), { id: uid(), name, target }];
+    persist(); render(); savingsDetailsDialog(category.id, savingsEntry.id);
   } else if (form.dataset.form === 'entry' || form.dataset.form === 'edit-entry') {
     const b = current(); if (!b) return;
     const c = b.categories.find((item) => item.id === String(data.get('categoryId'))); if (!c) return;
