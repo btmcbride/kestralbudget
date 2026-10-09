@@ -1766,7 +1766,25 @@ dialog.addEventListener('change', (event: Event) => {
     if (dueDateField) dueDateField.hidden = !supportsEntryDueDate(selectedCategory?.type);
   }
 });
-dialog.addEventListener('click', (event: MouseEvent) => { if (event.target === dialog) dialog.close(); });
+const isBackdropEvent = (event: MouseEvent): boolean => {
+  if (event.target !== dialog) return false;
+  const bounds = dialog.getBoundingClientRect();
+  return event.clientX < bounds.left || event.clientX > bounds.right
+    || event.clientY < bounds.top || event.clientY > bounds.bottom;
+};
+let backdropPointerDown = false;
+dialog.addEventListener('pointerdown', (event: PointerEvent) => {
+  backdropPointerDown = isBackdropEvent(event);
+});
+dialog.addEventListener('pointerup', (event: PointerEvent) => {
+  if (!isBackdropEvent(event)) backdropPointerDown = false;
+});
+dialog.addEventListener('pointercancel', () => { backdropPointerDown = false; });
+dialog.addEventListener('click', (event: MouseEvent) => {
+  const closeFromBackdrop = backdropPointerDown && isBackdropEvent(event);
+  backdropPointerDown = false;
+  if (closeFromBackdrop) dialog.close();
+});
 dialog.addEventListener('submit', (event: SubmitEvent) => {
   if (!(event.target instanceof HTMLFormElement)) return;
   event.preventDefault();
