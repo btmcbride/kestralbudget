@@ -17,5 +17,6 @@ const targets = platform === 'windows'
 
 await build({
   targets,
+  publish: 'never',
   config: createDesktopBuildConfig(packageJson.build, platform, channel),
 });
