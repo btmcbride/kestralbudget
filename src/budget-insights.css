@@ -1360,14 +1360,14 @@
 }
 
 .subscription-list {
-  margin: 12px 0 0;
+  margin: 0;
 }
 
 .subscription-list-panel {
   margin-top: 18px;
-  padding: clamp(14px, 2vw, 22px);
+  padding: 0 18px 6px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--surface);
 }
 
@@ -1376,7 +1376,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding-bottom: 13px;
+  padding: 15px 4px;
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -1384,81 +1384,122 @@
   margin: 0;
   color: var(--text-strong);
   font-family: Manrope, sans-serif;
-  font-size: calc(17px * var(--text-scale, 1));
+  font-size: calc(15px * var(--text-scale, 1));
   font-weight: 600;
 }
 
-.subscription-list-heading p:last-child {
-  margin: 4px 0 0;
+.subscription-list-heading > span {
   color: var(--muted);
-  font-size: calc(11px * var(--text-scale, 1));
+  font-family: var(--mono);
+  font-size: calc(10px * var(--text-scale, 1));
 }
 
-.subscription-list-heading .panel-kicker {
-  margin: 0 0 4px;
+.subscription-table-head,
+.subscription-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(130px, 0.55fr) 94px 112px;
+  align-items: center;
+  column-gap: 16px;
+}
+
+.subscription-table-head {
+  padding: 10px 4px 8px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-family: var(--mono);
   font-size: calc(9px * var(--text-scale, 1));
+  text-transform: uppercase;
+}
+
+.subscription-table-head span:nth-child(3) {
+  text-align: right;
+}
+
+.subscription-table-head span:last-child {
+  text-align: right;
 }
 
 .subscription-row {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto auto;
-  justify-content: initial;
-  gap: 14px;
-  padding: 13px 2px;
+  min-height: 50px;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .subscription-row:last-child {
   border-bottom: 0;
 }
 
-.subscription-icon {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--green) 24%, var(--line));
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--green) 9%, var(--surface));
-  color: var(--green);
-  font-size: 17px;
+.subscription-row:hover {
+  background: color-mix(in srgb, var(--surface-2) 45%, transparent);
 }
 
 .subscription-copy {
-  align-self: center;
+  display: grid;
+  min-width: 0;
+  gap: 3px;
 }
 
-.subscription-copy strong,
-.subscription-cost strong {
-  display: flex;
-  align-items: center;
-  gap: 7px;
+.subscription-copy strong {
+  overflow: hidden;
   color: var(--text-strong);
   font-size: calc(12px * var(--text-scale, 1));
-}
-
-.subscription-cost strong {
-  justify-content: flex-end;
-}
-
-.subscription-cost {
-  align-self: center;
-  text-align: right;
-}
-
-.subscription-cost small {
+  font-weight: 550;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.subscription-row-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.subscription-copy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: calc(10px * var(--text-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.subscription-row-actions .button {
-  min-height: 32px;
-  padding: 0 10px;
+.subscription-renewal {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: calc(11px * var(--text-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subscription-cost {
+  color: var(--text-strong);
+  font-size: calc(12px * var(--text-scale, 1));
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+}
+
+.subscription-row-actions {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  justify-content: end;
+  gap: 12px;
+}
+
+.subscription-action {
+  min-height: 30px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
   font-size: calc(10px * var(--text-scale, 1));
+  cursor: pointer;
+}
+
+.subscription-action:hover {
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.subscription-action:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
 }
 
 .subscription-action-placeholder {
@@ -1488,15 +1529,6 @@
 
 .field-optional {
   font-weight: 400;
-}
-
-.subscription-paused {
-  padding: 2px 5px;
-  border-radius: 4px;
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: calc(9px * var(--text-scale, 1));
-  font-weight: 500;
 }
 
 .undo-notice {
@@ -1532,29 +1564,39 @@
     grid-column: 1 / -1;
   }
 
-  .subscription-row {
-    grid-template-columns: 32px minmax(0, 1fr) auto;
-    gap: 8px 10px;
+  .subscription-list-panel {
+    padding: 0 12px 4px;
   }
 
-  .subscription-row .subscription-copy {
-    grid-column: 2;
+  .subscription-table-head {
+    display: none;
+  }
+
+  .subscription-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "copy cost"
+      "renewal actions";
+    gap: 5px 10px;
+    padding: 11px 2px;
+  }
+
+  .subscription-copy {
+    grid-area: copy;
+  }
+
+  .subscription-renewal {
+    grid-area: renewal;
+    font-size: calc(10px * var(--text-scale, 1));
   }
 
   .subscription-cost {
-    grid-column: 3;
-    grid-row: 1;
-    min-width: auto;
-  }
-
-  .subscription-icon {
-    width: 32px;
-    height: 32px;
+    grid-area: cost;
   }
 
   .subscription-row-actions {
-    grid-column: 2 / -1;
-    justify-content: flex-end;
+    grid-area: actions;
+    gap: 10px;
   }
 
   .undo-notice {

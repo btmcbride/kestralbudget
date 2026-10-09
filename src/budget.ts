@@ -1032,32 +1032,28 @@ function subscriptionTrackingPage(budget: Budget, budgets: Budget[]): string {
       const occurrence = buildExpenseEntriesForMonth(schedule, budget.month)[0];
       return {
         name: schedule.name,
-        category: category.name,
+        category: category.name.toLocaleLowerCase() === 'subscriptions' ? '' : category.name,
         amount: monthlyEquivalent(schedule),
-        details: `${expenseFrequencyLabel(schedule.frequency)}${occurrence ? ` · ${displayDate(occurrence.date)}` : ''}`,
-        paused: Boolean(schedule.paused),
-        icon: '↻',
-        actions: `<button class="button button-secondary" data-action="edit-expense-schedule" data-schedule="${esc(schedule.id)}" type="button">Edit</button><button class="button button-secondary subscription-action-placeholder" type="button" aria-hidden="true" tabindex="-1" disabled>Schedule</button>`,
+        details: schedule.paused ? 'Paused' : `${expenseFrequencyLabel(schedule.frequency)}${occurrence ? ` · ${displayDate(occurrence.date)}` : ''}`,
+        actions: `<button class="subscription-action" data-action="edit-expense-schedule" data-schedule="${esc(schedule.id)}" type="button">Edit</button><span class="subscription-action subscription-action-placeholder" aria-hidden="true">Schedule</span>`,
       };
     }),
     ...standaloneEntries.map(({ category, entry }) => {
       const date = entry.scheduledDate ?? entry.dueDate;
       return {
         name: entry.name,
-        category: category.name,
+        category: category.name.toLocaleLowerCase() === 'subscriptions' ? '' : category.name,
         amount: entry.planned,
         details: date ? `Due ${displayDate(date)}` : 'No due date',
-        paused: false,
-        icon: '◷',
-        actions: `<button class="button button-secondary" data-action="edit-entry" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Edit</button><button class="button button-secondary" data-action="schedule-subscription" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Schedule</button>`,
+        actions: `<button class="subscription-action" data-action="edit-entry" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Edit</button><button class="subscription-action" data-action="schedule-subscription" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Schedule</button>`,
       };
     }),
   ].sort((left, right) => left.name.localeCompare(right.name));
   const calendarNotice = subscriptionItems.length && !events.length
     ? '<div class="subscription-empty"><strong>No due dates this month</strong><p>Add a reminder date or recurring schedule to place subscriptions on the calendar.</p></div>'
     : '';
-  const listPanel = `<section class="subscription-list-panel" aria-label="All subscriptions"><div class="subscription-list-heading"><div><p class="panel-kicker">YOUR RECURRING COSTS</p><h2>All subscriptions</h2><p>${subscriptionItems.length} ${subscriptionItems.length === 1 ? 'subscription' : 'subscriptions'}</p></div></div>${subscriptionItems.length
-    ? `<div class="subscription-list">${subscriptionItems.map((item) => `<div class="subscription-row"><span class="subscription-icon" aria-hidden="true">${item.icon}</span><div class="subscription-copy"><strong>${esc(item.name)}${item.paused ? '<span class="subscription-paused">Paused</span>' : ''}</strong><small>${esc(item.category)} · ${esc(item.details)}</small></div><div class="subscription-cost"><strong>${fmt(item.amount)}</strong></div><div class="subscription-row-actions">${item.actions}</div></div>`).join('')}</div>`
+  const listPanel = `<section class="subscription-list-panel" aria-label="All subscriptions"><div class="subscription-list-heading"><h2>Subscriptions</h2><span>${subscriptionItems.length}</span></div>${subscriptionItems.length
+    ? `<div class="subscription-table-head" aria-hidden="true"><span>Subscription</span><span>Renewal</span><span>Monthly</span><span>Actions</span></div><div class="subscription-list">${subscriptionItems.map((item) => `<div class="subscription-row"><div class="subscription-copy"><strong>${esc(item.name)}</strong>${item.category ? `<small>${esc(item.category)}</small>` : ''}</div><span class="subscription-renewal">${esc(item.details)}</span><div class="subscription-cost"><strong>${fmt(item.amount)}</strong></div><div class="subscription-row-actions">${item.actions}</div></div>`).join('')}</div>`
     : '<div class="subscription-empty"><strong>No subscriptions yet</strong><p>Add a subscription with a due date or recurring schedule to see it here.</p></div>'}</section>`;
   return `<section class="dashboard page-content subscription-page">${monthTabs(budget, budgets)}<div class="page-heading"><div><p class="panel-kicker">RENEWALS & DUE DATES</p><h1>Subscription Tracking</h1><p class="heading-subtitle">${events.length} due ${events.length === 1 ? 'date' : 'dates'} · ${fmt(monthlyTotal)} monthly estimate</p></div><div class="heading-actions">${budget.expenseSchedules.length ? '<button class="button button-secondary" data-action="manage-expense-schedules">Manage schedules</button>' : ''}<button class="button button-primary" data-action="add-subscription">+ Add subscription</button></div></div>${calendarNotice}<section class="subscription-calendar" aria-label="${esc(monthText(budget.month))} subscription calendar"><div class="calendar-weekdays">${weekdays.map((day) => `<span>${day}</span>`).join('')}</div><div class="calendar-grid">${cells.join('')}</div></section>${listPanel}</section>`;
 }
