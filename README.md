@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://github.com/btmcbride/kestralbudget/releases/latest">Download</a>
   · <a href="#budgeting-that-works-your-way">Features</a>
+  · <a href="#core-workflows">How to use</a>
   · <a href="#why-kestral-budget">Why Kestral?</a>
   · <a href="#self-host">Self-host</a>
 </p>
@@ -40,6 +41,32 @@ Kestral Budget brings your monthly plan and actual spending together. Plan incom
 - **Track the details:** Log transactions against budget items, then search, filter, sort, and manage activity in bulk.
 - **Keep due dates visible:** Add due dates to bills, subscriptions, and debts, and see upcoming subscriptions on a calendar.
 - **Learn from the numbers:** Use Budget Performance, Cash Flow & Leftover Income, and Spending Trends reports to explore your budget over time.
+
+## Core workflows
+
+After creating a budget, choose **App tour** in the sidebar to see the main workflows in context. You can replay the tour at any time.
+
+### Set up a monthly plan
+
+Create a budget by choosing the sections you want to use, then add categories and budget items with planned amounts. The dashboard compares your plan with actual activity and shows unallocated income. Add months as you go; planned items carry forward, actuals reset, and carryover follows the method selected in Settings.
+
+Click a budget item to review its transaction history. Use the separate pencil button to edit the item without opening its history. Savings items also support optional goals and deposit tracking.
+
+### Record and review transactions
+
+Use **Quick Transaction** on the dashboard or **Add transaction** on the Transactions page to record income or spending and assign it to a category and budget item. From Transactions, search, filter, sort, edit or delete individual records, and select transactions for bulk deletion.
+
+### Plan recurring costs and renewals
+
+Schedule a planned expense from its category for a weekly, biweekly, monthly, or yearly frequency. The schedule adds planned items to eligible months; record actual spending separately as transactions. **Subscription Tracking** puts renewal dates on a monthly calendar, estimates monthly costs, and lets you manage or pause schedules.
+
+### Review progress and reports
+
+The dashboard summarizes income, allocation, and top spending. **Monthly Review** compares recorded activity with the plan and highlights categories over or under plan. **Reports** provides Budget Performance, Cash Flow & Leftover Income, and Spending Trends for the available months in your budget series.
+
+### Personalize and protect your data
+
+In **Settings**, choose a theme, accent color, text size, and layout density, plus currency, date format, calendar week start, and the carryover method. Currency settings change how amounts display; they do not convert values. Export a backup regularly and import one to restore or move data. Backups are manual.
 
 ## Why Kestral Budget?
 

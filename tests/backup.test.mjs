@@ -51,6 +51,34 @@ test('backup round-trips optional subscription reminder dates', () => {
   assert.deepEqual(parseBackup(createBackup(subscriptionState)), subscriptionState);
 });
 
+test('backup round-trips savings goals and their allocated deposits', () => {
+  const savingsState = structuredClone(state);
+  savingsState.budgets[0].categories[0] = {
+    id: 'savings',
+    type: 'savings',
+    name: 'Savings',
+    entries: [{
+      id: 'emergency-fund',
+      name: 'Emergency fund',
+      planned: 200,
+      actual: 0,
+      goals: [{ id: 'goal-1', name: 'Rainy day fund', target: 1000 }],
+    }],
+  };
+  savingsState.budgets[0].expenseSchedules = [];
+  savingsState.budgets[0].transactions = [{
+    id: 'deposit-1',
+    date: '2026-10-08',
+    description: 'Payday deposit',
+    amount: 100,
+    categoryId: 'savings',
+    entryId: 'emergency-fund',
+    savingsGoalId: 'goal-1',
+  }];
+
+  assert.deepEqual(parseBackup(createBackup(savingsState)), savingsState);
+});
+
 test('backup round-trips display, regional, calendar, and carryover preferences', () => {
   const settingsState = structuredClone(state);
   settingsState.budgets[0].carryoverMethod = 'planned';
@@ -60,7 +88,7 @@ test('backup round-trips display, regional, calendar, and carryover preferences'
     weekStartsOn: 'monday',
     accentColor: 'purple',
     density: 'compact',
-    textSize: 'large',
+    textSize: 'larger',
     currency: 'EUR',
     dateFormat: 'iso',
   };
@@ -72,6 +100,10 @@ test('backup rejects invalid settings preferences', () => {
   const invalidState = structuredClone(state);
   invalidState.preferences = { ...invalidState.preferences, currency: 'FRA' };
   assert.throws(() => createBackup(invalidState));
+
+  const invalidTextSize = structuredClone(state);
+  invalidTextSize.preferences = { ...invalidTextSize.preferences, textSize: 'huge' };
+  assert.throws(() => createBackup(invalidTextSize));
 
   const invalidBudget = structuredClone(state);
   invalidBudget.budgets[0].carryoverMethod = 'future';

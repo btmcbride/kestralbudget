@@ -8,8 +8,10 @@ import './recurring-expenses.css';
 import './guided-tour.css';
 import './budget-feedback.css';
 import { buildExpenseEntriesForMonth, buildIncomeEntriesForMonth, type ExpenseFrequency } from './paycheck-scheduler.js';
+import { hasMatchingUnscheduledOccurrence } from './subscription-events.js';
 import { createBackup, parseBackup } from './backup.js';
 import { IS_DEMO, fetchState, sendState, installDemoBanner } from './state-api.js';
+import { allSavingsGoalsMet, savingsGoalProgress, type SavingsGoal } from './savings-goals.js';
 
 const KEY = 'cryptic-budgets.v1';
 const GROUPS: StandardBudgetGroup[] = [
@@ -62,6 +64,7 @@ interface BudgetEntry {
   name: string;
   planned: number;
   actual: number;
+  goals?: SavingsGoal[];
   dueDate?: string;
   scheduleId?: string | null;
   scheduledDate?: string;
@@ -74,6 +77,7 @@ interface BudgetTransaction {
   amount: number;
   categoryId: string;
   entryId: string | null;
+  savingsGoalId?: string | null;
 }
 
 interface BudgetCategory {
@@ -98,12 +102,19 @@ interface Budget {
   expenseSchedules: RecurringExpenseSchedule[];
 }
 
+interface ExpenseScheduleBudgetSnapshot {
+  budgetId: string;
+  scheduleIndex: number;
+  schedule?: RecurringExpenseSchedule;
+  entries: Array<{ categoryId: string; index: number; entry: BudgetEntry }>;
+}
+
 type ThemePreference = 'system' | 'light' | 'dark';
 type CarryoverMethod = 'actual' | 'planned';
 type WeekStart = 'sunday' | 'monday';
 type AccentColor = 'forest' | 'blue' | 'purple' | 'amber' | 'rose';
 type DensityPreference = 'comfortable' | 'compact';
-type TextSizePreference = 'small' | 'medium' | 'large';
+type TextSizePreference = 'small' | 'medium' | 'large' | 'larger';
 type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'CAD' | 'AUD' | 'NZD' | 'JPY' | 'CNY' | 'INR' | 'CHF' | 'MXN' | 'BRL';
 type DateFormat = 'mdy' | 'dmy' | 'iso';
 type ReportId = 'performance' | 'cashflow' | 'trends';
@@ -184,13 +195,21 @@ const EXPENSE_FREQUENCIES: Array<{ value: ExpenseFrequency; label: string; descr
   ...PAY_FREQUENCIES,
   { value: 'yearly', label: 'Yearly', description: 'Once per year' },
 ];
-const GUIDED_TOUR_STEPS: Array<{ selector: string; view: 'overview' | 'transactions'; title: string; body: string }> = [
-  { selector: '.budget-tabs', view: 'overview', title: 'Move between months', body: 'The month tabs switch between monthly plans. Choose + to create the next month; planned items carry forward, actuals reset, and the carryover follows your selected rule.' },
-  { selector: '.metric-grid', view: 'overview', title: 'Read your monthly totals', body: 'Compare planned and actual income plus carryover, unallocated income, and allocated income.' },
-  { selector: '.at-a-glance', view: 'overview', title: 'Review income and categories', body: 'Expand Income or Categories to see planned, actual, and difference details. Collapse either section to keep its totals visible.' },
-  { selector: '.categories-section .section-title-row', view: 'overview', title: 'Organize your plan', body: 'Categories hold your budget items. Add categories, items, or recurring expenses here.' },
-  { selector: '.transactions-panel .transaction-tools', view: 'transactions', title: 'Find and manage activity', body: 'Search and filter by budget item or category, then select visible transactions for bulk deletion.' },
-  { selector: '.sidebar .backup-actions', view: 'overview', title: 'Protect your data', body: 'Export a backup or restore your budget from a previous backup.' },
+const GUIDED_TOUR_STEPS: Array<{ selector: string; fallbackSelector?: string; view: AppState['view']; title: string; body: string }> = [
+  { selector: '.budget-tabs', view: 'dashboard', title: 'Plan month by month', body: 'Switch between monthly budgets or add a month. Planned items carry forward, actuals start fresh, and the new month uses your selected carryover rule.' },
+  { selector: '.metric-grid', view: 'dashboard', title: 'See what is available', body: 'Compare planned and actual income, carryover, unallocated income, and the amount assigned across your categories.' },
+  { selector: '.at-a-glance .summary-disclosure', view: 'dashboard', title: 'Check your monthly summary', body: 'Expand Income and Categories to compare planned amounts, actuals, and differences. Top spending highlights the largest recorded expenses.' },
+  { selector: '.categories-section .section-title-row', view: 'dashboard', title: 'Build your budget plan', body: 'Create categories and add budget items for income, bills, expenses, subscriptions, debts, or savings. Items keep planned amounts separate from recorded activity.' },
+  { selector: '.entry-line', fallbackSelector: '.categories-section .section-title-row', view: 'dashboard', title: 'Review and edit an item', body: 'Click a budget item to open its history, then edit a transaction there if needed. Use the separate pencil button to update the budget item.' },
+  { selector: '.category-card[data-category-group="savings"]', fallbackSelector: '.categories-section .section-title-row', view: 'dashboard', title: 'Set savings goals', body: 'If you use the Savings section, give an item one or more named goals with target amounts. Add deposits to track progress, and open the savings item to review its goals and deposits.' },
+  { selector: '.categories-section .sub-category-actions [data-action="add-expense-schedule"]', fallbackSelector: '.categories-section .section-title-row', view: 'dashboard', title: 'Schedule recurring expenses', body: 'Use Schedule item beside a category to create weekly, biweekly, monthly, or yearly planned expenses. Manage schedules later from Subscription Tracking.' },
+  { selector: '.transactions-panel .transaction-tools', view: 'transactions', title: 'Find transactions', body: 'Search descriptions or dates, filter by category or budget item, and sort activity. Select visible transactions to manage several at once.' },
+  { selector: '.transactions-panel .panel-heading-actions', view: 'transactions', title: 'Record and manage activity', body: 'Add an income or expense transaction here. Edit or delete individual rows in the table, or use the selection controls to delete multiple transactions.' },
+  { selector: '.subscription-page .page-heading .heading-actions', view: 'subscriptions', title: 'Track upcoming renewals', body: 'See subscription due dates on the monthly calendar and review the monthly cost estimate. Add subscriptions here, or manage, pause, and update recurring schedules.' },
+  { selector: '.review-stats', view: 'review', title: 'Review the month', body: 'Compare recorded income and spending with your plan, see what remains after actuals, and identify categories that are over or under plan.' },
+  { selector: '.report-choice-card', fallbackSelector: '.report-page .page-heading', view: 'reports', title: 'Explore reports', body: 'Run Budget Performance, Cash Flow & Leftover Income, or Spending Trends. Reports can compare the months available in your budget series.' },
+  { selector: '.settings-page-heading', view: 'settings', title: 'Make the app yours', body: 'Choose a theme, accent, text size, and layout density. Set currency and date formats, the calendar week start, and how carryover is calculated.' },
+  { selector: '.sidebar .backup-actions', view: 'dashboard', title: 'Keep a backup', body: 'Export a backup file or import one to restore or move budget data. Backups are manual, so keep a copy somewhere safe.' },
 ];
 const payFrequencyInterval = (frequency: PayFrequency): number => ({ weekly: 7, biweekly: 14, monthly: 30 }[frequency] ?? 14);
 const expenseFrequencyInterval = (frequency: ExpenseFrequency): number => frequency === 'yearly' ? 365 : payFrequencyInterval(frequency);
@@ -220,7 +239,7 @@ const DEFAULT_TRANSACTION_SORT: TransactionSortConfig = { field: 'date', directi
 const isCarryoverMethod = (value: unknown): value is CarryoverMethod => value === 'actual' || value === 'planned';
 const ACCENT_COLORS: Array<[AccentColor, string]> = [['forest', 'Forest green'], ['blue', 'Blue'], ['purple', 'Purple'], ['amber', 'Amber'], ['rose', 'Rose']];
 const DENSITIES: Array<[DensityPreference, string]> = [['comfortable', 'Comfortable'], ['compact', 'Compact']];
-const TEXT_SIZES: Array<[TextSizePreference, string]> = [['small', 'Small'], ['medium', 'Default'], ['large', 'Large']];
+const TEXT_SIZES: Array<[TextSizePreference, string]> = [['small', 'Small'], ['medium', 'Default'], ['large', 'Large'], ['larger', 'Larger']];
 const CURRENCIES: Array<[CurrencyCode, string]> = [
   ['USD', 'US dollar (USD)'], ['EUR', 'Euro (EUR)'], ['GBP', 'British pound (GBP)'], ['CAD', 'Canadian dollar (CAD)'],
   ['AUD', 'Australian dollar (AUD)'], ['NZD', 'New Zealand dollar (NZD)'], ['JPY', 'Japanese yen (JPY)'],
@@ -308,6 +327,7 @@ const state: AppState = { budgets: [], active: null, view: 'dashboard', preferen
 let wizard: WizardState | null = null;
 let guidedTourStep = 0;
 let guidedTourLayer: HTMLElement | null = null;
+let guidedTourPositionFrame: number | undefined;
 let dashboardTab: 'overview' | 'transactions' = 'overview';
 let activeReport: ReportId | null = null;
 let reportStartMonth: string | null = null;
@@ -333,6 +353,12 @@ const fmt = (value: number): string => {
   return formatter.format(Number(value) || 0);
 };
 const group = (type: BudgetGroupId): BudgetGroup => GROUPS.find((item) => item.id === type) || { id: type, name: current()?.categories.find((category) => category.type === type)?.typeName || type.replace(/^custom:/, ''), color: 'teal' };
+const categoryOptionLabel = (category: BudgetCategory): string => {
+  const groupName = group(category.type).name;
+  return category.name.localeCompare(groupName, undefined, { sensitivity: 'base' }) === 0
+    ? category.name
+    : `${category.name} · ${groupName}`;
+};
 const current = (): Budget | null => state.budgets.find((budget) => budget.id === state.active) || null;
 const transactionSortConfig = (): TransactionSortConfig => ({
   field: state.preferences.transactionSortField ?? DEFAULT_TRANSACTION_SORT.field,
@@ -533,7 +559,7 @@ function applyAppearance(): void {
   const html = document.documentElement;
   html.dataset.accent = state.preferences.accentColor ?? 'forest';
   html.dataset.density = state.preferences.density ?? 'comfortable';
-  const textScales: Record<TextSizePreference, string> = { small: '0.9', medium: '1', large: '1.15' };
+  const textScales: Record<TextSizePreference, string> = { small: '0.9', medium: '1', large: '1.1', larger: '1.2' };
   html.style.setProperty('--text-scale', textScales[state.preferences.textSize ?? 'medium']);
   applyTheme();
 }
@@ -598,10 +624,67 @@ function render(): void {
   applyTransactionFilters();
 }
 function setupCompleteDialog(): void {
-  dialog.innerHTML = '<section class="tour-content"><div class="dialog-topline"><span class="dialog-icon">✓</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">BUDGET SETUP COMPLETE</p><h2>Your budget is ready</h2><p class="dialog-copy">Take a quick guided tour of the overview, categories, and transactions, or start exploring on your own.</p><div class="dialog-actions"><button class="button button-secondary" data-action="setup-finish" type="button">Maybe later</button><button class="button button-primary" data-action="guided-tour" type="button">Take a guided tour</button></div></section>';
+  dialog.innerHTML = '<section class="tour-content"><div class="dialog-topline"><span class="dialog-icon">✓</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">BUDGET SETUP COMPLETE</p><h2>Your budget is ready</h2><p class="dialog-copy">Take a tour of monthly planning, item history and editing, savings goals, transactions, recurring expenses, reviews, reports, and settings, or start exploring on your own.</p><div class="dialog-actions"><button class="button button-secondary" data-action="setup-finish" type="button">Maybe later</button><button class="button button-primary" data-action="guided-tour" type="button">Take a guided tour</button></div></section>';
   dialog.showModal();
 }
+function guidedTourTarget(): HTMLElement | null {
+  const currentStep = GUIDED_TOUR_STEPS[guidedTourStep];
+  return root.querySelector<HTMLElement>(currentStep.selector)
+    || (currentStep.fallbackSelector ? root.querySelector<HTMLElement>(currentStep.fallbackSelector) : null)
+    || root.querySelector<HTMLElement>('.topbar');
+}
+function updateGuidedTourPosition(): void {
+  if (!guidedTourLayer) return;
+  const target = guidedTourTarget();
+  if (!target) return;
+  const spotlight = requiredElement<HTMLElement>(guidedTourLayer, '.tour-spotlight');
+  const callout = requiredElement<HTMLElement>(guidedTourLayer, '.tour-callout');
+  const rect = target.getBoundingClientRect();
+  const padding = 5;
+  const left = Math.max(4, rect.left - padding);
+  const top = Math.max(4, rect.top - padding);
+  const right = Math.min(window.innerWidth - 4, rect.right + padding);
+  const bottom = Math.min(window.innerHeight - 4, rect.bottom + padding);
+  spotlight.style.left = `${left}px`;
+  spotlight.style.top = `${top}px`;
+  spotlight.style.width = `${Math.max(0, right - left)}px`;
+  spotlight.style.height = `${Math.max(0, bottom - top)}px`;
+  const calloutWidth = Math.min(390, window.innerWidth - 32);
+  callout.style.width = `${calloutWidth}px`;
+  const calloutHeight = callout.offsetHeight;
+  const maxLeft = Math.max(16, window.innerWidth - calloutWidth - 16);
+  const calloutLeft = Math.min(Math.max(16, rect.left), maxLeft);
+  const usableBottom = window.innerHeight - 88;
+  const below = rect.bottom + 14;
+  const above = rect.top - calloutHeight - 14;
+  const desiredTop = below + calloutHeight <= window.innerHeight - 16
+    ? Math.min(below, usableBottom - calloutHeight)
+    : above >= 16
+      ? above
+      : (usableBottom - calloutHeight) / 2;
+  const maxTop = Math.max(16, usableBottom - calloutHeight);
+  callout.style.left = `${calloutLeft}px`;
+  callout.style.top = `${Math.min(Math.max(16, desiredTop), maxTop)}px`;
+}
+function scheduleGuidedTourPosition(): void {
+  if (guidedTourPositionFrame !== undefined) return;
+  guidedTourPositionFrame = window.requestAnimationFrame(() => {
+    guidedTourPositionFrame = undefined;
+    updateGuidedTourPosition();
+  });
+}
+function advanceGuidedTour(): void {
+  if (guidedTourStep === GUIDED_TOUR_STEPS.length - 1) finishGuidedTour();
+  else showGuidedTour(guidedTourStep + 1);
+}
+function retreatGuidedTour(): void {
+  if (guidedTourStep > 0) showGuidedTour(guidedTourStep - 1);
+}
 function finishGuidedTour(): void {
+  window.removeEventListener('resize', scheduleGuidedTourPosition);
+  document.removeEventListener('scroll', scheduleGuidedTourPosition, true);
+  if (guidedTourPositionFrame !== undefined) window.cancelAnimationFrame(guidedTourPositionFrame);
+  guidedTourPositionFrame = undefined;
   guidedTourLayer?.remove();
   guidedTourLayer = null;
   root.inert = false;
@@ -611,13 +694,13 @@ function showGuidedTour(step = 0): void {
   guidedTourStep = Math.max(0, Math.min(step, GUIDED_TOUR_STEPS.length - 1));
   const currentStep = GUIDED_TOUR_STEPS[guidedTourStep];
   if (dialog.open) dialog.close();
-  const tourView = currentStep.view === 'transactions' ? 'transactions' : 'dashboard';
+  const tourView = currentStep.view;
   if (state.view !== tourView) {
     state.view = tourView;
-    dashboardTab = currentStep.view;
+    if (tourView === 'dashboard' || tourView === 'transactions') dashboardTab = tourView === 'transactions' ? 'transactions' : 'overview';
     render();
   }
-  const target = root.querySelector<HTMLElement>(currentStep.selector) || root.querySelector<HTMLElement>('.topbar');
+  const target = guidedTourTarget();
   if (!target) return;
   target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   root.inert = true;
@@ -626,28 +709,12 @@ function showGuidedTour(step = 0): void {
     guidedTourLayer.className = 'guided-tour-layer';
     guidedTourLayer.innerHTML = '<div class="tour-spotlight"></div><section class="tour-callout" role="dialog" aria-modal="true" aria-labelledby="tour-title"></section>';
     document.body.append(guidedTourLayer);
+    window.addEventListener('resize', scheduleGuidedTourPosition);
+    document.addEventListener('scroll', scheduleGuidedTourPosition, true);
   }
-  const spotlight = requiredElement<HTMLElement>(guidedTourLayer, '.tour-spotlight');
   const callout = requiredElement<HTMLElement>(guidedTourLayer, '.tour-callout');
-  callout.innerHTML = `<div class="tour-callout-head"><span class="tour-step-count">${guidedTourStep + 1} / ${GUIDED_TOUR_STEPS.length}</span><button class="tour-close" type="button" data-action="tour-finish" aria-label="Close tour">×</button></div><div class="tour-progress" aria-hidden="true">${GUIDED_TOUR_STEPS.map((_, index) => `<span class="${index <= guidedTourStep ? 'done' : ''}"></span>`).join('')}</div><h2 id="tour-title">${esc(currentStep.title)}</h2><p>${esc(currentStep.body)}</p><div class="tour-callout-actions"><button class="button button-secondary" data-action="tour-finish" type="button">Skip tour</button><button class="button button-secondary" data-action="tour-previous" type="button" ${guidedTourStep === 0 ? 'disabled' : ''}>Back</button><button class="button button-primary" data-action="tour-next" type="button">${guidedTourStep === GUIDED_TOUR_STEPS.length - 1 ? 'Finish' : 'Next'}</button></div>`;
-  const rect = target.getBoundingClientRect();
-  const padding = 5;
-  spotlight.style.left = `${Math.max(4, rect.left - padding)}px`;
-  spotlight.style.top = `${Math.max(4, rect.top - padding)}px`;
-  spotlight.style.width = `${Math.min(window.innerWidth - Math.max(4, rect.left - padding) - 4, rect.width + padding * 2)}px`;
-  spotlight.style.height = `${Math.min(window.innerHeight - Math.max(4, rect.top - padding) - 4, rect.height + padding * 2)}px`;
-  const calloutWidth = Math.min(390, window.innerWidth - 32);
-  callout.style.width = `${calloutWidth}px`;
-  const calloutHeight = callout.offsetHeight;
-  const left = Math.min(Math.max(16, rect.left), window.innerWidth - calloutWidth - 16);
-  const below = rect.bottom + 14;
-  const top = below + calloutHeight <= window.innerHeight - 16
-    ? below
-    : rect.top - calloutHeight - 14 >= 16
-      ? rect.top - calloutHeight - 14
-      : Math.max(16, (window.innerHeight - calloutHeight) / 2);
-  callout.style.left = `${left}px`;
-  callout.style.top = `${top}px`;
+  callout.innerHTML = `<div class="tour-callout-head"><span class="tour-step-count">${guidedTourStep + 1} / ${GUIDED_TOUR_STEPS.length}</span><button class="tour-close" type="button" data-action="tour-finish" aria-label="Close tour" aria-keyshortcuts="Escape">×</button></div><div class="tour-progress" style="--tour-step-count:${GUIDED_TOUR_STEPS.length}" aria-hidden="true">${GUIDED_TOUR_STEPS.map((_, index) => `<span class="${index <= guidedTourStep ? 'done' : ''}"></span>`).join('')}</div><h2 id="tour-title">${esc(currentStep.title)}</h2><p>${esc(currentStep.body)}</p><div class="tour-callout-actions" role="group" aria-label="Tour navigation"><span class="tour-shortcut-hint">← / → or Enter to navigate · Esc to close</span><button class="button button-secondary" data-action="tour-finish" type="button" aria-keyshortcuts="Escape">Skip tour</button><button class="button button-secondary" data-action="tour-previous" type="button" aria-keyshortcuts="ArrowLeft" ${guidedTourStep === 0 ? 'disabled' : ''}>Back</button><button class="button button-primary" data-action="tour-next" type="button" aria-keyshortcuts="ArrowRight Enter">${guidedTourStep === GUIDED_TOUR_STEPS.length - 1 ? 'Finish' : 'Next'}</button></div>`;
+  updateGuidedTourPosition();
   callout.querySelector<HTMLButtonElement>('[data-action="tour-next"]')?.focus();
 }
 function welcome(): string {
@@ -738,7 +805,7 @@ function dashboard(b: Budget, budgets: Budget[]): string {
     const diffClass = isIncome
       ? actual > planned ? 'positive' : actual < planned ? 'negative' : ''
       : actual > planned ? 'negative' : actual < planned ? 'positive' : '';
-    return `<details class="summary-disclosure" open><summary><strong>${label}</strong><span><small>Planned</small>${fmt(planned)}</span><span><small>Actual</small>${fmt(actual)}</span><span class="${diffClass}"><small>Diff</small>${signed(actual - planned)}</span></summary><div class="table-scroll"><table><colgroup><col class="summary-label-column"><col class="summary-value-column" span="3"></colgroup><thead><tr><th>${label === 'Income' ? 'INCOME SOURCE' : 'CATEGORY'}</th><th>PLANNED</th><th>ACTUAL</th><th>DIFF</th></tr></thead><tbody>${rows || `<tr><td colspan="4">No ${label.toLowerCase()} items yet.</td></tr>`}</tbody></table></div></details>`;
+    return `<details class="summary-disclosure" open><summary><strong>${label}</strong><span><small>Planned</small>${fmt(planned)}</span><span><small>Actual</small>${fmt(actual)}</span><span class="${diffClass}"><small>Diff</small>${signed(actual - planned)}</span></summary><div class="table-scroll"><table><colgroup><col class="summary-label-column"><col class="summary-value-column" span="3"></colgroup><thead><tr><th class="sr-only">${label === 'Income' ? 'INCOME SOURCE' : 'CATEGORY'}</th><th class="sr-only">PLANNED</th><th class="sr-only">ACTUAL</th><th class="sr-only">DIFF</th></tr></thead><tbody>${rows || `<tr><td colspan="4">No ${label.toLowerCase()} items yet.</td></tr>`}</tbody></table></div></details>`;
   };
   const incomeTotalActual = summary.income.actual;
   const categoryActual = summary.out.actual;
@@ -966,18 +1033,21 @@ function monthlyEquivalent(schedule: RecurringExpenseSchedule): number {
 }
 
 function subscriptionTrackingPage(budget: Budget, budgets: Budget[]): string {
-  const subscriptions = budget.expenseSchedules.flatMap((schedule) => {
+  const subscriptionSchedules = budget.expenseSchedules.flatMap((schedule) => {
     const category = budget.categories.find((item) => item.id === schedule.categoryId);
-    return category?.type === 'subscriptions' && !schedule.paused ? [{ schedule, category }] : [];
+    return category?.type === 'subscriptions' ? [{ schedule, category }] : [];
   });
-  const eventEntries: Array<{ date: string; name: string; amount: number; categoryId: string; entryId?: string; scheduleId?: string | null }> = budget.categories.filter((category) => category.type === 'subscriptions').flatMap((category) => category.entries.flatMap((entry) => {
+  const activeSchedules = subscriptionSchedules.filter(({ schedule }) => !schedule.paused);
+  const subscriptionCategories = budget.categories.filter((category) => category.type === 'subscriptions');
+  const eventEntries: Array<{ date: string; name: string; amount: number; categoryId: string; entryId?: string; scheduleId?: string | null }> = subscriptionCategories.flatMap((category) => category.entries.flatMap((entry) => {
     const date = entry.scheduledDate ?? entry.dueDate;
     return date?.startsWith(`${budget.month}-`) ? [{ date, name: entry.name, amount: entry.planned, categoryId: category.id, entryId: entry.id, scheduleId: entry.scheduleId }] : [];
   }));
   const events = [...eventEntries];
-  for (const { schedule, category } of subscriptions) {
+  for (const { schedule, category } of activeSchedules) {
     for (const occurrence of buildExpenseEntriesForMonth(schedule, budget.month)) {
-      if (events.some((event) => event.scheduleId === schedule.id && event.date === occurrence.date)) continue;
+      if (events.some((event) => event.scheduleId === schedule.id && event.date === occurrence.date)
+        || hasMatchingUnscheduledOccurrence(events, category.id, occurrence)) continue;
       events.push({ date: occurrence.date, name: occurrence.name, amount: occurrence.amount, categoryId: category.id, scheduleId: schedule.id });
     }
   }
@@ -997,25 +1067,48 @@ function subscriptionTrackingPage(budget: Budget, budgets: Budget[]): string {
   while (cells.length % 7 !== 0) cells.push('<div class="calendar-day calendar-day-empty" aria-hidden="true"></div>');
   const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const weekdays = weekStartsOn === 'monday' ? [...weekdayNames.slice(1), weekdayNames[0]] : weekdayNames;
-  const monthlyTotal = subscriptions.reduce((total, item) => total + monthlyEquivalent(item.schedule), 0)
-    + budget.categories.filter((category) => category.type === 'subscriptions')
-      .flatMap((category) => category.entries)
-      .filter((entry) => !entry.scheduleId)
-      .reduce((total, entry) => total + entry.planned, 0);
-  const hasSubscriptions = budget.categories.some((category) => category.type === 'subscriptions' && category.entries.length > 0)
-    || budget.expenseSchedules.some((schedule) => budget.categories.some((category) => category.id === schedule.categoryId && category.type === 'subscriptions'));
-  const undatedEntries = budget.categories.filter((category) => category.type === 'subscriptions').flatMap((category) => category.entries
-    .filter((entry) => !entry.dueDate && !entry.scheduledDate && !entry.scheduleId)
+  const scheduleSourceEntryIds = new Set<string>();
+  for (const { schedule, category } of subscriptionSchedules) {
+    const matchingEntries = category.entries.filter((entry) => !entry.scheduleId
+      && entry.dueDate === schedule.nextDueDate
+      && entry.name.trim().toLocaleLowerCase() === schedule.name.trim().toLocaleLowerCase());
+    const sourceEntry = matchingEntries.find((entry) => entry.planned === schedule.amount) ?? matchingEntries[0];
+    if (sourceEntry) scheduleSourceEntryIds.add(sourceEntry.id);
+  }
+  const standaloneEntries = subscriptionCategories.flatMap((category) => category.entries
+    .filter((entry) => !entry.scheduleId && !scheduleSourceEntryIds.has(entry.id))
     .map((entry) => ({ category, entry })));
-  const undatedList = undatedEntries.length
-    ? `<section class="subscription-list-panel"><h2>Subscriptions without a due date</h2><div class="subscription-list">${undatedEntries.map(({ category, entry }) => `<div class="subscription-row"><div class="subscription-copy"><strong>${esc(entry.name)}</strong><small>${esc(category.name)} · No due date set</small></div><div class="subscription-cost"><strong>${fmt(entry.planned)}</strong><small>budgeted per month</small></div><div class="subscription-row-actions"><button class="button button-secondary" data-action="edit-entry" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Edit</button><button class="button button-secondary" data-action="schedule-subscription" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Schedule</button></div></div>`).join('')}</div></section>`
+  const monthlyTotal = activeSchedules.reduce((total, item) => total + monthlyEquivalent(item.schedule), 0)
+    + standaloneEntries.reduce((total, item) => total + item.entry.planned, 0);
+  const subscriptionItems = [
+    ...subscriptionSchedules.map(({ schedule, category }) => {
+      const occurrence = buildExpenseEntriesForMonth(schedule, budget.month)[0];
+      return {
+        name: schedule.name,
+        category: category.name.toLocaleLowerCase() === 'subscriptions' ? '' : category.name,
+        amount: monthlyEquivalent(schedule),
+        details: schedule.paused ? 'Paused' : `${expenseFrequencyLabel(schedule.frequency)}${occurrence ? ` · ${displayDate(occurrence.date)}` : ''}`,
+        actions: `<button class="subscription-action" data-action="edit-expense-schedule" data-schedule="${esc(schedule.id)}" type="button">Edit</button><span class="subscription-action subscription-action-placeholder" aria-hidden="true">Schedule</span>`,
+      };
+    }),
+    ...standaloneEntries.map(({ category, entry }) => {
+      const date = entry.scheduledDate ?? entry.dueDate;
+      return {
+        name: entry.name,
+        category: category.name.toLocaleLowerCase() === 'subscriptions' ? '' : category.name,
+        amount: entry.planned,
+        details: date ? `Due ${displayDate(date)}` : 'No due date',
+        actions: `<button class="subscription-action" data-action="edit-entry" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Edit</button><button class="subscription-action" data-action="schedule-subscription" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Schedule</button>`,
+      };
+    }),
+  ].sort((left, right) => left.name.localeCompare(right.name));
+  const calendarNotice = subscriptionItems.length && !events.length
+    ? '<div class="subscription-empty"><strong>No due dates this month</strong><p>Add a reminder date or recurring schedule to place subscriptions on the calendar.</p></div>'
     : '';
-  const noSubscriptions = !hasSubscriptions
-    ? '<div class="subscription-empty"><strong>No subscriptions yet</strong><p>Add a subscription with a due date or recurring schedule to see it on the calendar.</p></div>'
-    : !events.length
-      ? '<div class="subscription-empty"><strong>No due dates this month</strong><p>Add a reminder date or recurring schedule to place subscriptions on the calendar.</p></div>'
-      : '';
-  return `<section class="dashboard page-content subscription-page">${monthTabs(budget, budgets)}<div class="page-heading"><div><p class="panel-kicker">RENEWALS & DUE DATES</p><h1>Subscription Tracking</h1><p class="heading-subtitle">${events.length} due ${events.length === 1 ? 'date' : 'dates'} · ${fmt(monthlyTotal)} monthly estimate</p></div><div class="heading-actions">${budget.expenseSchedules.length ? '<button class="button button-secondary" data-action="manage-expense-schedules">Manage schedules</button>' : ''}<button class="button button-primary" data-action="add-subscription">+ Add subscription</button></div></div>${noSubscriptions}<section class="subscription-calendar" aria-label="${esc(monthText(budget.month))} subscription calendar"><div class="calendar-weekdays">${weekdays.map((day) => `<span>${day}</span>`).join('')}</div><div class="calendar-grid">${cells.join('')}</div></section>${undatedList}</section>`;
+  const listPanel = `<section class="subscription-list-panel" aria-label="All subscriptions"><div class="subscription-list-heading"><h2>Subscriptions</h2><span>${subscriptionItems.length}</span></div>${subscriptionItems.length
+    ? `<div class="subscription-table-head" aria-hidden="true"><span>Subscription</span><span>Renewal</span><span>Monthly</span><span>Actions</span></div><div class="subscription-list">${subscriptionItems.map((item) => `<div class="subscription-row"><div class="subscription-copy"><strong>${esc(item.name)}</strong>${item.category ? `<small>${esc(item.category)}</small>` : ''}</div><span class="subscription-renewal">${esc(item.details)}</span><div class="subscription-cost"><strong>${fmt(item.amount)}</strong></div><div class="subscription-row-actions">${item.actions}</div></div>`).join('')}</div>`
+    : '<div class="subscription-empty"><strong>No subscriptions yet</strong><p>Add a subscription with a due date or recurring schedule to see it here.</p></div>'}</section>`;
+  return `<section class="dashboard page-content subscription-page">${monthTabs(budget, budgets)}<div class="page-heading"><div><p class="panel-kicker">RENEWALS & DUE DATES</p><h1>Subscription Tracking</h1><p class="heading-subtitle">${events.length} due ${events.length === 1 ? 'date' : 'dates'} · ${fmt(monthlyTotal)} monthly estimate</p></div><div class="heading-actions">${budget.expenseSchedules.length ? '<button class="button button-secondary" data-action="manage-expense-schedules">Manage schedules</button>' : ''}<button class="button button-primary" data-action="add-subscription">+ Add subscription</button></div></div>${calendarNotice}<section class="subscription-calendar" aria-label="${esc(monthText(budget.month))} subscription calendar"><div class="calendar-weekdays">${weekdays.map((day) => `<span>${day}</span>`).join('')}</div><div class="calendar-grid">${cells.join('')}</div></section>${listPanel}</section>`;
 }
 
 function beginSubscriptionSetup(): void {
@@ -1060,6 +1153,9 @@ function updateTransactionSelectionUI(): void {
 }
 function categoryCard(g: BudgetGroup, budget: Budget): string {
   const cats = budget.categories.filter((c) => c.type === g.id);
+  const savingsTransactions = g.id === 'savings'
+    ? seriesBudgets(budget.seriesId).flatMap((month) => month.transactions)
+    : budget.transactions;
   const entries = cats.flatMap((c) => c.entries);
   const groupTotal = cats.reduce((total, category) => {
     const categoryAmount = categoryTotals(budget, category);
@@ -1078,17 +1174,19 @@ function categoryCard(g: BudgetGroup, budget: Budget): string {
       const itemRows = category.entries.length
         ? `<div class="entry-columns" aria-hidden="true"><span></span><span>Due date</span><span>Planned</span><span>Actual</span></div>${category.entries.map((entry) => {
           const actualForEntry = entryActual(budget, entry);
+          const goals = entry.goals ?? [];
+          const goalsMet = g.id === 'savings' && allSavingsGoalsMet(goals, savingsTransactions);
           const expenseSchedule = budget.expenseSchedules.find((item) => item.id === entry.scheduleId);
           const dueLabel = expenseSchedule
             ? `${PAY_FREQUENCIES.find((item) => item.value === expenseSchedule.frequency)?.label ?? 'Recurring'} · ${displayDate(entry.scheduledDate ?? expenseSchedule.nextDueDate)}`
             : entry.dueDate ? displayDate(entry.dueDate) : '';
-          return `<button class="entry-row" data-action="edit-entry" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" aria-label="${esc(entry.name)}${dueLabel ? `: due ${dueLabel}` : ''}, planned ${fmt(entry.planned)}, actual ${fmt(actualForEntry)}"><span class="entry-name">${esc(entry.name)}</span><span class="entry-due">${esc(dueLabel)}</span><span class="entry-planned">${fmt(entry.planned)}</span><span class="entry-actual ${actualForEntry > +entry.planned && g.id !== 'income' ? 'negative' : ''}">${fmt(actualForEntry)}</span></button>`;
+          return `<div class="entry-line"><button class="entry-row ${goalsMet ? 'savings-goals-met' : ''}" data-action="${g.id === 'savings' ? 'savings-details' : 'entry-history'}" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" aria-label="${esc(entry.name)}${dueLabel ? `: due ${dueLabel}` : ''}, planned ${fmt(entry.planned)}, actual ${fmt(actualForEntry)}${goalsMet ? ', all savings goals met' : ''}"><span class="entry-name">${esc(entry.name)}${goalsMet ? '<span class="savings-goal-badge">✓ Goals met</span>' : ''}</span><span class="entry-due">${esc(dueLabel)}</span><span class="entry-planned">${fmt(entry.planned)}</span><span class="entry-actual ${actualForEntry > +entry.planned && g.id !== 'income' ? 'negative' : ''}">${fmt(actualForEntry)}</span></button><button class="entry-edit" data-action="edit-entry" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button" aria-label="Edit ${esc(entry.name)}" title="Edit">✎</button></div>`;
         }).join('')}`
         : '<p class="category-empty">Nothing added yet</p>';
       return `<div class="sub-category"><div class="sub-category-title"><span>${esc(category.name)}</span><span class="sub-category-actions"><button class="text-action" data-action="add-entry" data-category="${esc(category.id)}">Add item</button>${g.id === 'income' ? '' : `<button class="text-action" data-action="add-expense-schedule" data-category="${esc(category.id)}">Schedule item</button>`}</span></div>${itemRows}</div>`;
     }).join('')
     : `<div class="first-category"><span>No ${esc(g.name.toLowerCase())} categories yet</span><button class="text-action" data-action="add-category" data-type="${esc(g.id)}">Create one</button></div>`;
-  return `<section class="category-card"><header class="category-header"><span class="category-symbol ${g.color}">${symbol}</span><div class="category-heading"><h3>${esc(g.name)}</h3><span>${entries.length} ${entries.length === 1 ? 'item' : 'items'}</span></div><div class="category-total"><strong>${fmt(planned)}</strong><small>planned</small></div><div class="category-actions"><button class="icon-button add-small" data-action="add-entry" data-type="${esc(g.id)}" data-category="${esc(cats[0]?.id || '')}" aria-label="Add ${esc(g.name)} entry">+</button></div></header><div class="category-progress"><span class="${actual > planned && g.id !== 'income' ? 'over-budget' : ''}" style="width:${planned ? Math.min(100, actual / planned * 100) : (actual ? 100 : 0)}%"></span></div>${body}<footer class="category-footer"><span>Actual ${fmt(actual)}</span><span class="${differenceClass}">${signed(actual - planned)} diff</span></footer></section>`;
+  return `<section class="category-card" data-category-group="${esc(g.id)}"><header class="category-header"><span class="category-symbol ${g.color}">${symbol}</span><div class="category-heading"><h3>${esc(g.name)}</h3><span>${entries.length} ${entries.length === 1 ? 'item' : 'items'}</span></div><div class="category-total"><strong>${fmt(planned)}</strong><small>planned</small></div></header><div class="category-progress"><span class="${actual > planned && g.id !== 'income' ? 'over-budget' : ''}" style="width:${planned ? Math.min(100, actual / planned * 100) : (actual ? 100 : 0)}%"></span></div>${body}<footer class="category-footer"><span>Actual ${fmt(actual)}</span><span class="${differenceClass}">${signed(actual - planned)} diff</span></footer></section>`;
 }
 
 function open(content: string): void { dialog.innerHTML = content; if (!dialog.open) dialog.showModal(); }
@@ -1250,7 +1348,7 @@ function expenseScheduleDialog(categoryId: string, schedule?: RecurringExpenseSc
   const today = new Date();
   const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const editing = schedule !== undefined;
-  open(`<form class="dialog-form" data-form="expense-schedule" data-schedule="${esc(schedule?.id ?? '')}" data-source-entry="${esc(sourceEntry?.id ?? '')}"><div class="dialog-topline"><span class="dialog-icon">◷</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">${editing ? 'UPDATE RECURRING EXPENSE' : sourceEntry ? 'SET UP SUBSCRIPTION RENEWAL' : 'REPEAT A PLANNED EXPENSE'}</p><h2>${editing ? 'Manage schedule' : sourceEntry ? 'Schedule subscription' : 'Schedule recurring item'}</h2><p class="dialog-copy">${sourceEntry ? 'This keeps your existing budget item and uses it for the next matching charge, rather than adding a duplicate.' : 'A planned item is added to each eligible month. Actual spending is recorded separately.'}</p><label for="expense-schedule-name">Item name</label><input id="expense-schedule-name" name="name" maxlength="80" value="${esc(schedule?.name ?? sourceEntry?.name ?? '')}" placeholder="e.g. Rent" required><label for="expense-schedule-amount">Planned amount</label><div class="input-money"><span>$</span><input id="expense-schedule-amount" name="amount" type="number" min="0.01" step="0.01" value="${schedule ? esc(schedule.amount) : sourceEntry ? esc(sourceEntry.planned) : ''}" placeholder="0.00" required></div><label for="expense-schedule-category">Category</label><select id="expense-schedule-category" name="categoryId" required>${categories.map((item) => `<option value="${esc(item.id)}" ${item.id === category.id ? 'selected' : ''}>${esc(item.name)} · ${esc(group(item.type).name)}</option>`).join('')}</select><label for="expense-schedule-frequency">Frequency</label><select id="expense-schedule-frequency" name="frequency">${PAY_FREQUENCIES.map((option) => `<option value="${option.value}" ${option.value === (schedule?.frequency ?? 'monthly') ? 'selected' : ''}>${option.label}</option>`).join('')}</select><label for="expense-schedule-date">Next due date</label><input id="expense-schedule-date" name="nextDueDate" type="date" value="${esc(schedule?.nextDueDate ?? sourceEntry?.dueDate ?? todayString)}" required><div class="dialog-actions">${editing ? `<button class="button button-danger" data-action="remove-expense-schedule" data-schedule="${esc(schedule.id)}" type="button">Remove</button><button class="button button-secondary" data-action="toggle-expense-schedule" data-schedule="${esc(schedule.id)}" type="button">${schedule.paused ? 'Resume' : 'Pause'}</button>` : ''}<button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">${editing ? 'Save changes' : 'Create schedule'}</button></div></form>`);
+  open(`<form class="dialog-form" data-form="expense-schedule" data-schedule="${esc(schedule?.id ?? '')}" data-source-entry="${esc(sourceEntry?.id ?? '')}"><div class="dialog-topline"><span class="dialog-icon">◷</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">${editing ? 'UPDATE RECURRING EXPENSE' : sourceEntry ? 'SET UP SUBSCRIPTION RENEWAL' : 'REPEAT A PLANNED EXPENSE'}</p><h2>${editing ? 'Manage schedule' : sourceEntry ? 'Schedule subscription' : 'Schedule recurring item'}</h2><p class="dialog-copy">${sourceEntry ? 'This keeps your existing budget item and uses it for the next matching charge, rather than adding a duplicate.' : 'A planned item is added to each eligible month. Actual spending is recorded separately.'}</p><label for="expense-schedule-name">Item name</label><input id="expense-schedule-name" name="name" maxlength="80" value="${esc(schedule?.name ?? sourceEntry?.name ?? '')}" placeholder="e.g. Rent" required><label for="expense-schedule-amount">Planned amount</label><div class="input-money"><span>$</span><input id="expense-schedule-amount" name="amount" type="number" min="0.01" step="0.01" value="${schedule ? esc(schedule.amount) : sourceEntry ? esc(sourceEntry.planned) : ''}" placeholder="0.00" required></div><label for="expense-schedule-category">Category</label><select id="expense-schedule-category" name="categoryId" required>${categories.map((item) => `<option value="${esc(item.id)}" ${item.id === category.id ? 'selected' : ''}>${esc(categoryOptionLabel(item))}</option>`).join('')}</select><label for="expense-schedule-frequency">Frequency</label><select id="expense-schedule-frequency" name="frequency">${PAY_FREQUENCIES.map((option) => `<option value="${option.value}" ${option.value === (schedule?.frequency ?? 'monthly') ? 'selected' : ''}>${option.label}</option>`).join('')}</select><label for="expense-schedule-date">Next due date</label><input id="expense-schedule-date" name="nextDueDate" type="date" value="${esc(schedule?.nextDueDate ?? sourceEntry?.dueDate ?? todayString)}" required><div class="dialog-actions">${editing ? `<button class="button button-danger" data-action="remove-expense-schedule" data-schedule="${esc(schedule.id)}" type="button">Remove</button><button class="button button-secondary" data-action="toggle-expense-schedule" data-schedule="${esc(schedule.id)}" type="button">${schedule.paused ? 'Resume' : 'Pause'}</button>` : ''}<button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">${editing ? 'Save changes' : 'Create schedule'}</button></div></form>`);
   const frequencySelect = requiredElement<HTMLSelectElement>(dialog, '#expense-schedule-frequency');
   const selectedFrequency = schedule?.frequency ?? 'monthly';
   frequencySelect.add(new Option('Yearly', 'yearly'));
@@ -1361,17 +1459,64 @@ function removeExpenseSchedule(scheduleId: string, sourceBudget: Budget): void {
     budget.expenseSchedules = budget.expenseSchedules.filter((schedule) => schedule.id !== scheduleId);
   }
 }
+function snapshotExpenseSchedule(scheduleId: string, sourceBudget: Budget): ExpenseScheduleBudgetSnapshot[] {
+  return seriesBudgets(sourceBudget.seriesId).map((budget) => {
+    const scheduleIndex = budget.expenseSchedules.findIndex((item) => item.id === scheduleId);
+    const schedule = budget.expenseSchedules[scheduleIndex];
+    return {
+      budgetId: budget.id,
+      scheduleIndex,
+      schedule: schedule ? { ...schedule } : undefined,
+      entries: budget.categories.flatMap((category) => category.entries
+        .map((entry, index) => ({ categoryId: category.id, index, entry: { ...entry } }))
+        .filter(({ entry }) => entry.scheduleId === scheduleId)),
+    };
+  });
+}
+function restoreExpenseSchedule(scheduleId: string, snapshots: ExpenseScheduleBudgetSnapshot[]): void {
+  for (const snapshot of snapshots) {
+    const budget = state.budgets.find((item) => item.id === snapshot.budgetId);
+    if (!budget) continue;
+    const savedEntryIds = new Set(snapshot.entries.map(({ entry }) => entry.id));
+    for (const category of budget.categories) {
+      category.entries = category.entries.filter((entry) => !savedEntryIds.has(entry.id));
+    }
+    if (snapshot.schedule) {
+      budget.expenseSchedules = budget.expenseSchedules.filter((item) => item.id !== scheduleId);
+      budget.expenseSchedules.splice(Math.max(0, snapshot.scheduleIndex), 0, snapshot.schedule);
+    }
+    for (const original of [...snapshot.entries].sort((left, right) => left.index - right.index)) {
+      const destination = budget.categories.find((item) => item.id === original.categoryId);
+      if (destination) destination.entries.splice(Math.min(original.index, destination.entries.length), 0, original.entry);
+    }
+  }
+}
 function transactionItemOptions(categoryId: string, selectedEntryId: string | null = null): string {
   const category = current()?.categories.find((item) => item.id === categoryId);
   return `<option value="" ${selectedEntryId ? '' : 'selected'}>Category only</option>${category?.entries.map((entry) => `<option value="${esc(entry.id)}" ${entry.id === selectedEntryId ? 'selected' : ''}>${esc(entry.name)}</option>`).join('') ?? ''}`;
 }
-function transactionDialog(transaction: BudgetTransaction | null = null, duplicate = false): void {
+function transactionGoalOptions(categoryId: string, entryId: string | null, selectedGoalId: string | null = null): string {
+  const entry = current()?.categories.find((category) => category.id === categoryId)?.entries.find((item) => item.id === entryId);
+  return `<option value="">Unassigned</option>${(entry?.goals ?? []).map((goal) => `<option value="${esc(goal.id)}" ${goal.id === selectedGoalId ? 'selected' : ''}>${esc(goal.name)}</option>`).join('')}`;
+}
+function updateTransactionGoalField(): void {
+  const categoryId = requiredElement<HTMLSelectElement>(dialog, '#transaction-category').value;
+  const entryId = requiredElement<HTMLSelectElement>(dialog, '#transaction-entry').value || null;
+  const category = current()?.categories.find((item) => item.id === categoryId);
+  const entry = category?.entries.find((item) => item.id === entryId);
+  const field = requiredElement<HTMLElement>(dialog, '#transaction-savings-goal-field');
+  const select = requiredElement<HTMLSelectElement>(dialog, '#transaction-savings-goal');
+  field.hidden = category?.type !== 'savings' || !entry;
+  select.innerHTML = transactionGoalOptions(categoryId, entryId, select.value || null);
+}
+function transactionDialog(transaction: BudgetTransaction | null = null, duplicate = false, categoryId?: string, entryId?: string): void {
   const budget = current();
   if (!budget || budget.categories.length === 0) return;
-  const selectedCategoryId = transaction?.categoryId ?? budget.categories[0].id;
+  const selectedCategoryId = transaction?.categoryId ?? categoryId ?? budget.categories[0].id;
   const today = new Date();
   const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  open(`<form class="dialog-form" data-form="transaction" data-transaction="${esc(transaction?.id ?? '')}"><div class="dialog-topline"><span class="dialog-icon">${transaction ? '↗' : '＋'}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">${transaction ? 'UPDATE RECORDED ACTIVITY' : 'RECORD ACTUAL ACTIVITY'}</p><h2>${transaction ? 'Edit transaction' : 'Add transaction'}</h2><label for="transaction-date">Date</label><input id="transaction-date" name="date" type="date" value="${esc(transaction?.date ?? todayString)}" required><label for="transaction-description">Description</label><input id="transaction-description" name="description" maxlength="100" value="${esc(transaction?.description ?? '')}" placeholder="e.g. Grocery store" required><label for="transaction-amount">Amount</label><div class="input-money"><span>$</span><input id="transaction-amount" name="amount" type="number" min="0.01" step="0.01" value="${transaction ? esc(transaction.amount) : ''}" placeholder="0.00" required></div><label for="transaction-category">Budget category</label><select id="transaction-category" name="categoryId" required>${budget.categories.map((category) => `<option value="${esc(category.id)}" ${category.id === selectedCategoryId ? 'selected' : ''}>${esc(category.name)} · ${esc(group(category.type).name)}</option>`).join('')}</select><label for="transaction-entry">Budget item <span>(optional)</span></label><select id="transaction-entry" name="entryId">${transactionItemOptions(selectedCategoryId, transaction?.entryId ?? null)}</select><div class="dialog-actions">${transaction ? '<button class="button button-danger" data-action="delete-transaction" data-transaction="' + esc(transaction.id) + '" type="button">Delete</button>' : '<span></span>'}<button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">${transaction ? 'Save changes' : 'Add transaction'}</button></div></form>`);
+  const selectedEntryId = transaction?.entryId ?? entryId ?? null;
+  open(`<form class="dialog-form" data-form="transaction" data-transaction="${esc(transaction?.id ?? '')}"><div class="dialog-topline"><span class="dialog-icon">${transaction ? '↗' : '＋'}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">${transaction ? 'UPDATE RECORDED ACTIVITY' : 'RECORD ACTUAL ACTIVITY'}</p><h2>${transaction ? 'Edit transaction' : 'Add transaction'}</h2><label for="transaction-date">Date</label><input id="transaction-date" name="date" type="date" value="${esc(transaction?.date ?? todayString)}" required><label for="transaction-description">Description</label><input id="transaction-description" name="description" maxlength="100" value="${esc(transaction?.description ?? '')}" placeholder="e.g. Grocery store" required><label for="transaction-amount">Amount</label><div class="input-money"><span>$</span><input id="transaction-amount" name="amount" type="number" min="0.01" step="0.01" value="${transaction ? esc(transaction.amount) : ''}" placeholder="0.00" required></div><label for="transaction-category">Budget category</label><select id="transaction-category" name="categoryId" required>${budget.categories.map((category) => `<option value="${esc(category.id)}" ${category.id === selectedCategoryId ? 'selected' : ''}>${esc(categoryOptionLabel(category))}</option>`).join('')}</select><label for="transaction-entry">Budget item <span>(optional)</span></label><select id="transaction-entry" name="entryId">${transactionItemOptions(selectedCategoryId, selectedEntryId)}</select><div id="transaction-savings-goal-field" ${budget.categories.find((category) => category.id === selectedCategoryId)?.type === 'savings' && selectedEntryId ? '' : 'hidden'}><label for="transaction-savings-goal">Savings goal <span>(optional)</span></label><select id="transaction-savings-goal" name="savingsGoalId">${transactionGoalOptions(selectedCategoryId, selectedEntryId, transaction?.savingsGoalId ?? null)}</select></div><div class="dialog-actions">${transaction ? '<button class="button button-danger" data-action="delete-transaction" data-transaction="' + esc(transaction.id) + '" type="button">Delete</button>' : '<span></span>'}<button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">${transaction ? 'Save changes' : 'Add transaction'}</button></div></form>`);
   if (transaction && duplicate) {
     requiredElement<HTMLFormElement>(dialog, 'form').dataset.transaction = '';
     requiredElement<HTMLElement>(dialog, '.panel-kicker').textContent = 'CREATE A COPY OF RECORDED ACTIVITY';
@@ -1389,10 +1534,59 @@ function transactionDialog(transaction: BudgetTransaction | null = null, duplica
   }
   requiredElement<HTMLInputElement>(dialog, '#transaction-description').focus();
 }
+function savingsDetailsDialog(categoryId: string, entryId: string, showGoalForm = false): void {
+  const budget = current();
+  const category = budget?.categories.find((item) => item.id === categoryId);
+  const entry = category?.entries.find((item) => item.id === entryId);
+  if (!budget || !category || category.type !== 'savings' || !entry) return;
+  const goals = entry.goals ?? [];
+  const savingsTransactions = seriesBudgets(budget.seriesId).flatMap((month) => month.transactions);
+  const goalIds = new Set(goals.map((goal) => goal.id));
+  const transactions = savingsTransactions.filter((transaction) => transaction.entryId === entry.id
+    || (transaction.savingsGoalId && goalIds.has(transaction.savingsGoalId)))
+    .sort((left, right) => right.date.localeCompare(left.date));
+  const met = allSavingsGoalsMet(goals, savingsTransactions);
+  const transactionRows = transactions.length
+    ? transactions.map((transaction) => {
+      const goalName = goals.find((goal) => goal.id === transaction.savingsGoalId)?.name ?? 'Unassigned';
+      const editButton = budget.transactions.some((item) => item.id === transaction.id)
+        ? `<button class="text-action" type="button" data-action="edit-transaction" data-transaction="${esc(transaction.id)}">Edit</button>`
+        : '';
+      return `<div class="savings-transaction"><span><strong>${esc(transaction.description)}</strong><small>${esc(displayDate(transaction.date))} · ${esc(goalName)}</small></span><strong>${fmt(transaction.amount)}</strong>${editButton}</div>`;
+    }).join('')
+    : '<p class="savings-empty">No deposits recorded for this item yet.</p>';
+  const goalRows = goals.length
+    ? goals.map((goal) => {
+      const progress = savingsGoalProgress(goal, savingsTransactions);
+      const percent = Math.min(100, goal.target > 0 ? progress.saved / goal.target * 100 : 0);
+      return `<article class="savings-goal ${progress.met ? 'is-met' : ''}"><div class="savings-goal-heading"><strong>${esc(goal.name)}</strong><span>${progress.met ? '✓ Goal met' : `${fmt(progress.remaining)} to go`}</span></div><div class="savings-goal-progress" role="progressbar" aria-label="${esc(goal.name)} progress" aria-valuemin="0" aria-valuemax="${esc(goal.target)}" aria-valuenow="${esc(Math.min(goal.target, progress.saved))}"><span style="width:${percent}%"></span></div><small>${fmt(progress.saved)} saved of ${fmt(goal.target)}</small><button class="text-action transaction-delete" type="button" data-action="delete-savings-goal" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}" data-goal="${esc(goal.id)}">Remove goal</button></article>`;
+    }).join('')
+    : '<p class="savings-empty">No goals yet. Add an optional goal to start tracking progress.</p>';
+  const prompt = met
+    ? `<p class="savings-complete" role="status">You’ve met all your savings goals. Would you like to set a new goal?</p><button class="button button-secondary" type="button" data-action="show-savings-goal-form" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}">Set a new goal</button>`
+    : goals.length ? `<button class="button button-secondary" type="button" data-action="show-savings-goal-form" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}">Add another goal</button>` : '';
+  const goalForm = showGoalForm || goals.length === 0
+    ? `<form class="savings-goal-form" data-form="savings-goal" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}"><label for="savings-goal-name">Goal name</label><input id="savings-goal-name" name="name" maxlength="80" placeholder="e.g. Emergency fund" required><label for="savings-goal-target">Target amount</label><div class="input-money"><span>$</span><input id="savings-goal-target" name="target" type="number" min="0.01" step="0.01" placeholder="0.00" required></div><div class="dialog-actions"><button class="button button-primary" type="submit">Add goal</button></div></form>`
+    : '';
+  open(`<section class="savings-details"><div class="dialog-topline"><span class="dialog-icon">◈</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">SAVINGS DETAILS</p><h2>${esc(entry.name)}</h2><div class="savings-section"><div class="savings-section-heading"><h3>Goals</h3>${prompt}</div>${goalRows}${goalForm}</div><div class="savings-section"><h3>Deposits</h3>${transactionRows}</div><div class="dialog-actions"><button class="button button-secondary" type="button" data-action="edit-entry" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}">Edit item</button><button class="button button-secondary" type="button" data-action="new-transaction" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}">Add deposit</button><button class="button button-secondary" type="button" data-action="close">Close</button></div></section>`);
+}
 function categoryDialog(type: string = 'expenses'): void {
   const customType = type.startsWith('custom:');
   open(`<form class="dialog-form" data-form="category"><div class="dialog-topline"><span class="dialog-icon">＋</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">MAKE ROOM FOR A NEW LINE</p><h2>New category</h2><p class="dialog-copy">Create a category inside a standard group or define a new spending type.</p><label for="category-name">Category name</label><input id="category-name" name="name" maxlength="60" placeholder="e.g. Home projects" required><label for="category-type">Category type</label><select id="category-type" name="type">${GROUPS.map((g) => `<option value="${g.id}" ${g.id === type ? 'selected' : ''}>${g.name}</option>`).join('')}<option value="custom" ${customType ? 'selected' : ''}>Custom type…</option></select><div id="custom-type-field" ${customType ? '' : 'hidden'}><label for="custom-type">Custom type name</label><input id="custom-type" name="customType" maxlength="40" value="${customType ? esc(type.slice(7)) : ''}" placeholder="e.g. Pet care" ${customType ? 'required' : ''}></div><div class="dialog-actions"><button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">Create category</button></div></form>`);
   requiredElement<HTMLInputElement>(dialog, '#category-name').focus();
+}
+function entryHistoryDialog(categoryId: string, entryId: string): void {
+  const budget = current();
+  const entry = budget?.categories.find((item) => item.id === categoryId)?.entries.find((item) => item.id === entryId);
+  if (!budget || !entry) return;
+  const income = budget.categories.find((item) => item.id === categoryId)?.type === 'income';
+  const transactions = budget.transactions.filter((transaction) => transaction.entryId === entry.id)
+    .sort((left, right) => right.date.localeCompare(left.date));
+  const baseRow = +entry.actual > 0
+    ? `<div class="entry-history-row"><span class="entry-history-description"><strong>Recorded amount</strong><small>Entered on the item</small></span><strong class="entry-history-amount">${fmt(entry.actual)}</strong><span></span></div>`
+    : '';
+  const rows = transactions.map((transaction) => `<div class="entry-history-row"><span class="entry-history-description"><strong>${esc(transaction.description)}</strong><small>${esc(displayDate(transaction.date))}</small></span><strong class="entry-history-amount">${income ? '+' : '−'}${fmt(transaction.amount)}</strong><button class="text-action" type="button" data-action="edit-transaction" data-transaction="${esc(transaction.id)}" aria-label="Edit transaction: ${esc(transaction.description)}">Edit</button></div>`).join('');
+  open(`<section class="savings-details entry-history"><div class="dialog-topline"><span class="dialog-icon">◔</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">ITEM HISTORY</p><h2>${esc(entry.name)}</h2><p class="dialog-copy">Planned ${fmt(entry.planned)} · Actual ${fmt(entryActual(budget, entry))}</p><div class="savings-section"><h3>Transactions</h3><div class="entry-history-list">${baseRow}${rows || (baseRow ? '' : '<p class="savings-empty">No transactions recorded for this item yet.</p>')}</div></div><div class="dialog-actions"><button class="button button-secondary" type="button" data-action="edit-entry" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}">Edit item</button><button class="button button-secondary" type="button" data-action="new-transaction" data-category="${esc(categoryId)}" data-entry="${esc(entryId)}">Add transaction</button><button class="button button-secondary" type="button" data-action="close">Close</button></div></section>`);
 }
 function entryDialog(categoryId: string = '', type: string = 'expenses', entry: BudgetEntry | null = null): void {
   const b = current(); if (!b) return;
@@ -1400,7 +1594,7 @@ function entryDialog(categoryId: string = '', type: string = 'expenses', entry: 
   const wantedType = cat?.type || type;
   const options = b.categories.filter((c) => c.type === wantedType);
   const selected = cat?.id || options[0]?.id || '';
-  open(`<form class="dialog-form" data-form="${entry ? 'edit-entry' : 'entry'}" data-entry="${esc(entry?.id || '')}"><div class="dialog-topline"><span class="dialog-icon">${entry ? '↗' : '＋'}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">${entry ? 'UPDATE YOUR PLAN' : 'ADD TO YOUR PLAN'}</p><h2>${entry ? 'Edit entry' : 'New entry'}</h2><label for="entry-name">Name</label><input id="entry-name" name="name" maxlength="80" value="${esc(entry?.name || '')}" placeholder="e.g. Electricity" required><label for="entry-category">Category</label><select id="entry-category" name="categoryId" required>${b.categories.map((c) => `<option value="${esc(c.id)}" ${c.id === selected ? 'selected' : ''}>${esc(c.name)} · ${esc(group(c.type).name)}</option>`).join('')}</select><div class="amount-fields"><div><label for="entry-planned">Planned</label><div class="input-money"><span>$</span><input id="entry-planned" name="planned" type="number" min="0" step="0.01" value="${esc(entry?.planned ?? 0)}" required></div></div><div><label for="entry-actual">Actual</label><div class="input-money"><span>$</span><input id="entry-actual" name="actual" type="number" min="0" step="0.01" value="${esc(entry?.actual ?? 0)}" required></div></div></div><div class="dialog-actions">${entry ? `<button class="button button-danger" data-action="delete-entry" data-entry="${esc(entry.id)}" type="button">Delete</button>` : '<span></span>'}<button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">${entry ? 'Save changes' : 'Add entry'}</button></div></form>`);
+  open(`<form class="dialog-form" data-form="${entry ? 'edit-entry' : 'entry'}" data-entry="${esc(entry?.id || '')}"><div class="dialog-topline"><span class="dialog-icon">${entry ? '↗' : '＋'}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">${entry ? 'UPDATE YOUR PLAN' : 'ADD TO YOUR PLAN'}</p><h2>${entry ? 'Edit entry' : 'New entry'}</h2><label for="entry-name">Name</label><input id="entry-name" name="name" maxlength="80" value="${esc(entry?.name || '')}" placeholder="e.g. Electricity" required><label for="entry-category">Category</label><select id="entry-category" name="categoryId" required>${b.categories.map((c) => `<option value="${esc(c.id)}" ${c.id === selected ? 'selected' : ''}>${esc(categoryOptionLabel(c))}</option>`).join('')}</select><div class="amount-fields"><div><label for="entry-planned">Planned</label><div class="input-money"><span>$</span><input id="entry-planned" name="planned" type="number" min="0" step="0.01" value="${esc(entry?.planned ?? 0)}" required></div></div><div><label for="entry-actual">Actual</label><div class="input-money"><span>$</span><input id="entry-actual" name="actual" type="number" min="0" step="0.01" value="${esc(entry?.actual ?? 0)}" required></div></div></div><div class="dialog-actions">${entry ? `<button class="button button-danger" data-action="delete-entry" data-entry="${esc(entry.id)}" type="button">Delete</button>` : '<span></span>'}<button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">${entry ? 'Save changes' : 'Add entry'}</button></div></form>`);
   const dueDateField = document.createElement('div');
   dueDateField.id = 'entry-due-date-field';
   dueDateField.className = 'subscription-date-field';
@@ -1415,7 +1609,7 @@ document.addEventListener('click', (event: MouseEvent) => {
   const openBudgetMenu = root.querySelector<HTMLDetailsElement>('.budget-menu[open]');
   if (openBudgetMenu && !openBudgetMenu.contains(event.target)) openBudgetMenu.open = false;
   const button = event.target.closest<HTMLButtonElement>('[data-action]'); if (!button) return;
-  const { action, id, category, type, entry, transaction, schedule } = button.dataset;
+  const { action, id, category, type, entry, transaction, schedule, goal } = button.dataset;
   if (action === 'toggle-sidebar') {
     const isOpen = document.body.classList.toggle('mobile-nav-open');
     button.setAttribute('aria-expanded', String(isOpen));
@@ -1465,12 +1659,8 @@ document.addEventListener('click', (event: MouseEvent) => {
   if (action === 'guided-tour') { showGuidedTour(); return; }
   if (action === 'setup-finish') { dialog.close(); return; }
   if (action === 'tour-finish') { finishGuidedTour(); return; }
-  if (action === 'tour-previous') { showGuidedTour(guidedTourStep - 1); return; }
-  if (action === 'tour-next') {
-    if (guidedTourStep === GUIDED_TOUR_STEPS.length - 1) finishGuidedTour();
-    else showGuidedTour(guidedTourStep + 1);
-    return;
-  }
+  if (action === 'tour-previous') { retreatGuidedTour(); return; }
+  if (action === 'tour-next') { advanceGuidedTour(); return; }
   if (action === 'export-backup') exportBackup();
   if (action === 'import-backup') requiredElement<HTMLInputElement>(root, '#backup-file').click();
   if (action === 'new-budget') newBudgetDialog();
@@ -1510,7 +1700,7 @@ document.addEventListener('click', (event: MouseEvent) => {
     }
   }
   if (action === 'delete-month') deleteCurrentMonth();
-  if (action === 'new-transaction') transactionDialog();
+  if (action === 'new-transaction') transactionDialog(null, false, category, entry);
   if (action === 'toggle-transaction-sort-direction') {
     const sort = transactionSortConfig();
     setTransactionSort(sort.field, sort.direction === 'asc' ? 'desc' : 'asc');
@@ -1527,6 +1717,22 @@ document.addEventListener('click', (event: MouseEvent) => {
   if (action === 'select-month' && id) { state.active = id; persist(); render(); }
   if (action === 'add-category') categoryDialog(type || 'expenses');
   if (action === 'add-entry') entryDialog(category || '', type || 'expenses');
+  if (action === 'entry-history' && category && entry) entryHistoryDialog(category, entry);
+  if (action === 'savings-details' && category && entry) savingsDetailsDialog(category, entry);
+  if (action === 'show-savings-goal-form' && category && entry) savingsDetailsDialog(category, entry, true);
+  if (action === 'delete-savings-goal' && category && entry && goal) {
+    const budget = current();
+    const savingsEntry = budget?.categories.find((item) => item.id === category)?.entries.find((item) => item.id === entry);
+    if (budget && savingsEntry && window.confirm('Remove this savings goal? Its deposits will remain recorded as unassigned.')) {
+      for (const month of seriesBudgets(budget.seriesId)) {
+        month.categories.forEach((item) => item.entries.forEach((budgetEntry) => {
+          budgetEntry.goals = (budgetEntry.goals ?? []).filter((item) => item.id !== goal);
+        }));
+        month.transactions.forEach((item) => { if (item.savingsGoalId === goal) item.savingsGoalId = null; });
+      }
+      persist(); render(); savingsDetailsDialog(category, entry);
+    }
+  }
   if (action === 'add-expense-schedule' && category) expenseScheduleDialog(category);
   if (action === 'schedule-subscription' && category && entry) {
     const budget = current();
@@ -1551,30 +1757,9 @@ document.addEventListener('click', (event: MouseEvent) => {
     const budget = current();
     const found = budget?.expenseSchedules.find((item) => item.id === schedule);
     if (budget && found && window.confirm(`Remove the recurring schedule for "${found.name}"? Future planned occurrences without actual activity will be removed.`)) {
-      const snapshots = seriesBudgets(budget.seriesId).map((monthBudget) => {
-        const monthSchedule = monthBudget.expenseSchedules.find((item) => item.id === schedule);
-        return {
-          budgetId: monthBudget.id,
-          scheduleIndex: monthBudget.expenseSchedules.findIndex((item) => item.id === schedule),
-          schedule: monthSchedule ? { ...monthSchedule } : undefined,
-          entries: monthBudget.categories.flatMap((item) => item.entries.map((scheduledEntry, index) => ({ categoryId: item.id, index, entry: { ...scheduledEntry } })).filter(({ entry: scheduledEntry }) => scheduledEntry.scheduleId === schedule)),
-        };
-      });
-
+      const snapshots = snapshotExpenseSchedule(schedule, budget);
       removeExpenseSchedule(schedule, budget);
-      offerUndo(`Schedule for "${found.name}" removed`, () => {
-        for (const snapshot of snapshots) {
-          const monthBudget = state.budgets.find((item) => item.id === snapshot.budgetId);
-          if (!monthBudget || !snapshot.schedule) continue;
-          for (const item of monthBudget.categories) item.entries = item.entries.filter((scheduledEntry) => !snapshot.entries.some(({ entry: original }) => original.id === scheduledEntry.id));
-          monthBudget.expenseSchedules = monthBudget.expenseSchedules.filter((item) => item.id !== schedule);
-          monthBudget.expenseSchedules.splice(Math.max(0, snapshot.scheduleIndex), 0, snapshot.schedule);
-          for (const original of [...snapshot.entries].sort((left, right) => left.index - right.index)) {
-            const destination = monthBudget.categories.find((item) => item.id === original.categoryId);
-            if (destination) destination.entries.splice(Math.min(original.index, destination.entries.length), 0, original.entry);
-          }
-        }
-      });
+      offerUndo(`Schedule for "${found.name}" removed`, () => restoreExpenseSchedule(schedule, snapshots));
       persist(); dialog.close(); render();
     }
   }
@@ -1595,22 +1780,33 @@ document.addEventListener('click', (event: MouseEvent) => {
       wizardView();
     }
   }
-  if (action === 'delete-entry' && entry && window.confirm('Delete this budget entry? Its linked transactions will also be removed.')) {
+  if (action === 'delete-entry' && entry) {
     const budget = current();
     if (budget) {
       const location = budget.categories.flatMap((item) => item.entries.map((budgetEntry, index) => ({ category: item, entry: budgetEntry, index }))).find((item) => item.entry.id === entry);
-      const deletedTransactions = budget.transactions.map((item, index) => ({ transaction: item, index })).filter(({ transaction: item }) => item.entryId === entry);
       if (location) {
+        const scheduleId = location.entry.scheduleId;
+        const schedule = scheduleId
+          ? seriesBudgets(budget.seriesId).flatMap((item) => item.expenseSchedules).find((item) => item.id === scheduleId)
+          : undefined;
+        const confirmation = schedule
+          ? `Delete "${location.entry.name}" and stop its recurring schedule for "${schedule.name}"? Future planned occurrences without actual activity will be removed. Its linked transactions will also be removed.`
+          : 'Delete this budget entry? Its linked transactions will also be removed.';
+        if (!window.confirm(confirmation)) return;
+        const snapshots = schedule ? snapshotExpenseSchedule(schedule.id, budget) : [];
+        const deletedTransactions = budget.transactions.map((item, index) => ({ transaction: item, index })).filter(({ transaction: item }) => item.entryId === entry);
+        if (schedule) removeExpenseSchedule(schedule.id, budget);
         location.category.entries = location.category.entries.filter((item) => item.id !== entry);
+        budget.transactions = budget.transactions.filter((transaction) => transaction.entryId !== entry);
+        offerUndo(`"${location.entry.name}" deleted${schedule ? ' with its recurring schedule' : ''}`, () => {
+          if (schedule) restoreExpenseSchedule(schedule.id, snapshots);
+          const destination = budget.categories.find((item) => item.id === location.category.id);
+          if (destination && !destination.entries.some((item) => item.id === entry)) {
+            destination.entries.splice(Math.min(location.index, destination.entries.length), 0, location.entry);
+          }
+          restoreDeletedTransactions(budget, deletedTransactions);
+        });
       }
-      budget.transactions = budget.transactions.filter((transaction) => transaction.entryId !== entry);
-      if (location) offerUndo(`"${location.entry.name}" deleted`, () => {
-        const destination = budget.categories.find((item) => item.id === location.category.id);
-        if (destination && !destination.entries.some((item) => item.id === entry)) {
-          destination.entries.splice(Math.min(location.index, destination.entries.length), 0, location.entry);
-        }
-        restoreDeletedTransactions(budget, deletedTransactions);
-      });
     }
     persist(); dialog.close(); render();
   }
@@ -1625,6 +1821,18 @@ document.addEventListener('click', (event: MouseEvent) => {
   }
 });
 document.addEventListener('keydown', (event: KeyboardEvent) => {
+  if (guidedTourLayer && !event.altKey && !event.ctrlKey && !event.metaKey) {
+    if (event.key === 'ArrowRight' || event.key === 'Enter') {
+      event.preventDefault();
+      advanceGuidedTour();
+      return;
+    }
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      retreatGuidedTour();
+      return;
+    }
+  }
   if (event.key === 'Escape' && document.body.classList.contains('mobile-nav-open')) {
     document.body.classList.remove('mobile-nav-open');
     root.querySelector<HTMLButtonElement>('.mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
@@ -1751,6 +1959,9 @@ dialog.addEventListener('change', (event: Event) => {
     requiredElement<HTMLInputElement>(dialog, '#custom-type').required = custom;
   } else if (target.id === 'transaction-category') {
     requiredElement<HTMLSelectElement>(dialog, '#transaction-entry').innerHTML = transactionItemOptions(target.value);
+    updateTransactionGoalField();
+  } else if (target.id === 'transaction-entry') {
+    updateTransactionGoalField();
   } else if (target.id === 'entry-category') {
     const budget = current();
     const selectedCategory = budget?.categories.find((item) => item.id === target.value);
@@ -1758,7 +1969,25 @@ dialog.addEventListener('change', (event: Event) => {
     if (dueDateField) dueDateField.hidden = !supportsEntryDueDate(selectedCategory?.type);
   }
 });
-dialog.addEventListener('click', (event: MouseEvent) => { if (event.target === dialog) dialog.close(); });
+const isBackdropEvent = (event: MouseEvent): boolean => {
+  if (event.target !== dialog) return false;
+  const bounds = dialog.getBoundingClientRect();
+  return event.clientX < bounds.left || event.clientX > bounds.right
+    || event.clientY < bounds.top || event.clientY > bounds.bottom;
+};
+let backdropPointerDown = false;
+dialog.addEventListener('pointerdown', (event: PointerEvent) => {
+  backdropPointerDown = isBackdropEvent(event);
+});
+dialog.addEventListener('pointerup', (event: PointerEvent) => {
+  if (!isBackdropEvent(event)) backdropPointerDown = false;
+});
+dialog.addEventListener('pointercancel', () => { backdropPointerDown = false; });
+dialog.addEventListener('click', (event: MouseEvent) => {
+  const closeFromBackdrop = backdropPointerDown && isBackdropEvent(event);
+  backdropPointerDown = false;
+  if (closeFromBackdrop) dialog.close();
+});
 dialog.addEventListener('submit', (event: SubmitEvent) => {
   if (!(event.target instanceof HTMLFormElement)) return;
   event.preventDefault();
@@ -1896,7 +2125,12 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
     const date = String(data.get('date') ?? '');
     const category = budget.categories.find((item) => item.id === categoryId);
     if (!category || (entryId && !category.entries.some((item) => item.id === entryId)) || !description || !date || amount <= 0) return;
-    const transaction: BudgetTransaction = { id: form.dataset.transaction || uid(), date, description, amount, categoryId, entryId };
+    const selectedGoalId = String(data.get('savingsGoalId') ?? '') || null;
+    const selectedEntry = category.entries.find((item) => item.id === entryId);
+    const savingsGoalId = category.type === 'savings' && selectedEntry?.goals?.some((goal) => goal.id === selectedGoalId)
+      ? selectedGoalId
+      : null;
+    const transaction: BudgetTransaction = { id: form.dataset.transaction || uid(), date, description, amount, categoryId, entryId, savingsGoalId };
     const existingIndex = budget.transactions.findIndex((item) => item.id === transaction.id);
     if (existingIndex >= 0) budget.transactions[existingIndex] = transaction;
     else budget.transactions.push(transaction);
@@ -1940,6 +2174,17 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
     const customName = String(data.get('customType') || '').trim();
     const type = (data.get('type') === 'custom' ? `custom:${customName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : String(data.get('type'))) as BudgetGroupId;
     b.categories.push({ id: uid(), type, ...(customName ? { typeName: customName } : {}), name: String(data.get('name')).trim(), entries: [] }); persist(); dialog.close(); render();
+  } else if (form.dataset.form === 'savings-goal') {
+    const budget = current();
+    const categoryId = form.dataset.category;
+    const entryId = form.dataset.entry;
+    const category = budget?.categories.find((item) => item.id === categoryId);
+    const savingsEntry = category?.entries.find((item) => item.id === entryId);
+    const name = String(data.get('name') ?? '').trim();
+    const target = Number(data.get('target'));
+    if (!budget || category?.type !== 'savings' || !savingsEntry || !name || !Number.isFinite(target) || target <= 0) return;
+    savingsEntry.goals = [...(savingsEntry.goals ?? []), { id: uid(), name, target }];
+    persist(); render(); savingsDetailsDialog(category.id, savingsEntry.id);
   } else if (form.dataset.form === 'entry' || form.dataset.form === 'edit-entry') {
     const b = current(); if (!b) return;
     const c = b.categories.find((item) => item.id === String(data.get('categoryId'))); if (!c) return;

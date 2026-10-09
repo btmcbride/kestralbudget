@@ -66,8 +66,28 @@ async function handleApi(request, response, pathname, storage) {
         transactionSortField: ['date', 'type', 'category', 'description', 'amount'].includes(payload.preferences.transactionSortField) ? payload.preferences.transactionSortField : 'date',
         transactionSortDirection: payload.preferences.transactionSortDirection === 'asc' ? 'asc' : 'desc',
         theme: ['system', 'light', 'dark'].includes(payload.preferences.theme) ? payload.preferences.theme : 'system',
+        carryoverMethod: ['actual', 'planned'].includes(payload.preferences.carryoverMethod) ? payload.preferences.carryoverMethod : 'actual',
+        weekStartsOn: ['sunday', 'monday'].includes(payload.preferences.weekStartsOn) ? payload.preferences.weekStartsOn : 'sunday',
+        accentColor: ['forest', 'blue', 'purple', 'amber', 'rose'].includes(payload.preferences.accentColor) ? payload.preferences.accentColor : 'forest',
+        density: ['comfortable', 'compact'].includes(payload.preferences.density) ? payload.preferences.density : 'comfortable',
+        textSize: ['small', 'medium', 'large', 'larger'].includes(payload.preferences.textSize) ? payload.preferences.textSize : 'medium',
+        currency: ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'NZD', 'JPY', 'CNY', 'INR', 'CHF', 'MXN', 'BRL'].includes(payload.preferences.currency) ? payload.preferences.currency : 'USD',
+        dateFormat: ['mdy', 'dmy', 'iso'].includes(payload.preferences.dateFormat) ? payload.preferences.dateFormat : 'mdy',
       }
-      : { defaultBudgetId: null, userName: null, transactionSortField: 'date', transactionSortDirection: 'desc' };
+      : {
+        defaultBudgetId: null,
+        userName: null,
+        transactionSortField: 'date',
+        transactionSortDirection: 'desc',
+        theme: 'system',
+        carryoverMethod: 'actual',
+        weekStartsOn: 'sunday',
+        accentColor: 'forest',
+        density: 'comfortable',
+        textSize: 'medium',
+        currency: 'USD',
+        dateFormat: 'mdy',
+      };
     storage.writeState(JSON.stringify({ budgets: payload.budgets, active: payload.active, preferences }));
     sendJson(response, 200, { saved: true });
     return;
