@@ -1360,15 +1360,71 @@
 }
 
 .subscription-list {
-  max-height: min(48vh, 390px);
-  overflow-y: auto;
-  margin: 14px 0;
-  padding-right: 10px;
-  scrollbar-gutter: stable;
+  margin: 12px 0 0;
+}
+
+.subscription-list-panel {
+  margin-top: 18px;
+  padding: clamp(14px, 2vw, 22px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.subscription-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.subscription-list-heading h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-family: Manrope, sans-serif;
+  font-size: calc(17px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
+.subscription-list-heading p:last-child {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: calc(11px * var(--text-scale, 1));
+}
+
+.subscription-list-heading .panel-kicker {
+  margin: 0 0 4px;
+  font-size: calc(9px * var(--text-scale, 1));
+}
+
+.subscription-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto auto;
+  justify-content: initial;
+  gap: 14px;
+  padding: 13px 2px;
+}
+
+.subscription-row:last-child {
+  border-bottom: 0;
+}
+
+.subscription-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--green) 24%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--green) 9%, var(--surface));
+  color: var(--green);
+  font-size: 17px;
 }
 
 .subscription-copy {
-  flex: 1 1 auto;
+  align-self: center;
 }
 
 .subscription-copy strong,
@@ -1380,8 +1436,12 @@
   font-size: calc(12px * var(--text-scale, 1));
 }
 
+.subscription-cost strong {
+  justify-content: flex-end;
+}
+
 .subscription-cost {
-  flex: 0 0 auto;
+  align-self: center;
   text-align: right;
 }
 
@@ -1391,8 +1451,18 @@
 
 .subscription-row-actions {
   display: flex;
-  flex: 0 0 auto;
+  align-items: center;
   gap: 6px;
+}
+
+.subscription-row-actions .button {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: calc(10px * var(--text-scale, 1));
+}
+
+.subscription-action-placeholder {
+  visibility: hidden;
 }
 
 .subscription-date-field {
@@ -1463,21 +1533,28 @@
   }
 
   .subscription-row {
-    flex-wrap: wrap;
-    gap: 8px;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: 8px 10px;
   }
 
   .subscription-row .subscription-copy {
-    flex-basis: calc(100% - 80px);
+    grid-column: 2;
   }
 
   .subscription-cost {
-    margin-left: auto;
+    grid-column: 3;
+    grid-row: 1;
+    min-width: auto;
+  }
+
+  .subscription-icon {
+    width: 32px;
+    height: 32px;
   }
 
   .subscription-row-actions {
+    grid-column: 2 / -1;
     justify-content: flex-end;
-    width: 100%;
   }
 
   .undo-notice {

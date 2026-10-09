@@ -99,6 +99,13 @@ interface Budget {
   expenseSchedules: RecurringExpenseSchedule[];
 }
 
+interface ExpenseScheduleBudgetSnapshot {
+  budgetId: string;
+  scheduleIndex: number;
+  schedule?: RecurringExpenseSchedule;
+  entries: Array<{ categoryId: string; index: number; entry: BudgetEntry }>;
+}
+
 type ThemePreference = 'system' | 'light' | 'dark';
 type CarryoverMethod = 'actual' | 'planned';
 type WeekStart = 'sunday' | 'monday';
@@ -973,16 +980,18 @@ function monthlyEquivalent(schedule: RecurringExpenseSchedule): number {
 }
 
 function subscriptionTrackingPage(budget: Budget, budgets: Budget[]): string {
-  const subscriptions = budget.expenseSchedules.flatMap((schedule) => {
+  const subscriptionSchedules = budget.expenseSchedules.flatMap((schedule) => {
     const category = budget.categories.find((item) => item.id === schedule.categoryId);
-    return category?.type === 'subscriptions' && !schedule.paused ? [{ schedule, category }] : [];
+    return category?.type === 'subscriptions' ? [{ schedule, category }] : [];
   });
-  const eventEntries: Array<{ date: string; name: string; amount: number; categoryId: string; entryId?: string; scheduleId?: string | null }> = budget.categories.filter((category) => category.type === 'subscriptions').flatMap((category) => category.entries.flatMap((entry) => {
+  const activeSchedules = subscriptionSchedules.filter(({ schedule }) => !schedule.paused);
+  const subscriptionCategories = budget.categories.filter((category) => category.type === 'subscriptions');
+  const eventEntries: Array<{ date: string; name: string; amount: number; categoryId: string; entryId?: string; scheduleId?: string | null }> = subscriptionCategories.flatMap((category) => category.entries.flatMap((entry) => {
     const date = entry.scheduledDate ?? entry.dueDate;
     return date?.startsWith(`${budget.month}-`) ? [{ date, name: entry.name, amount: entry.planned, categoryId: category.id, entryId: entry.id, scheduleId: entry.scheduleId }] : [];
   }));
   const events = [...eventEntries];
-  for (const { schedule, category } of subscriptions) {
+  for (const { schedule, category } of activeSchedules) {
     for (const occurrence of buildExpenseEntriesForMonth(schedule, budget.month)) {
       if (events.some((event) => event.scheduleId === schedule.id && event.date === occurrence.date)
         || hasMatchingUnscheduledOccurrence(events, category.id, occurrence)) continue;
@@ -1005,25 +1014,52 @@ function subscriptionTrackingPage(budget: Budget, budgets: Budget[]): string {
   while (cells.length % 7 !== 0) cells.push('<div class="calendar-day calendar-day-empty" aria-hidden="true"></div>');
   const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const weekdays = weekStartsOn === 'monday' ? [...weekdayNames.slice(1), weekdayNames[0]] : weekdayNames;
-  const monthlyTotal = subscriptions.reduce((total, item) => total + monthlyEquivalent(item.schedule), 0)
-    + budget.categories.filter((category) => category.type === 'subscriptions')
-      .flatMap((category) => category.entries)
-      .filter((entry) => !entry.scheduleId)
-      .reduce((total, entry) => total + entry.planned, 0);
-  const hasSubscriptions = budget.categories.some((category) => category.type === 'subscriptions' && category.entries.length > 0)
-    || budget.expenseSchedules.some((schedule) => budget.categories.some((category) => category.id === schedule.categoryId && category.type === 'subscriptions'));
-  const undatedEntries = budget.categories.filter((category) => category.type === 'subscriptions').flatMap((category) => category.entries
-    .filter((entry) => !entry.dueDate && !entry.scheduledDate && !entry.scheduleId)
+  const scheduleSourceEntryIds = new Set<string>();
+  for (const { schedule, category } of subscriptionSchedules) {
+    const matchingEntries = category.entries.filter((entry) => !entry.scheduleId
+      && entry.dueDate === schedule.nextDueDate
+      && entry.name.trim().toLocaleLowerCase() === schedule.name.trim().toLocaleLowerCase());
+    const sourceEntry = matchingEntries.find((entry) => entry.planned === schedule.amount) ?? matchingEntries[0];
+    if (sourceEntry) scheduleSourceEntryIds.add(sourceEntry.id);
+  }
+  const standaloneEntries = subscriptionCategories.flatMap((category) => category.entries
+    .filter((entry) => !entry.scheduleId && !scheduleSourceEntryIds.has(entry.id))
     .map((entry) => ({ category, entry })));
-  const undatedList = undatedEntries.length
-    ? `<section class="subscription-list-panel"><h2>Subscriptions without a due date</h2><div class="subscription-list">${undatedEntries.map(({ category, entry }) => `<div class="subscription-row"><div class="subscription-copy"><strong>${esc(entry.name)}</strong><small>${esc(category.name)} · No due date set</small></div><div class="subscription-cost"><strong>${fmt(entry.planned)}</strong><small>budgeted per month</small></div><div class="subscription-row-actions"><button class="button button-secondary" data-action="edit-entry" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Edit</button><button class="button button-secondary" data-action="schedule-subscription" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Schedule</button></div></div>`).join('')}</div></section>`
+  const monthlyTotal = activeSchedules.reduce((total, item) => total + monthlyEquivalent(item.schedule), 0)
+    + standaloneEntries.reduce((total, item) => total + item.entry.planned, 0);
+  const subscriptionItems = [
+    ...subscriptionSchedules.map(({ schedule, category }) => {
+      const occurrence = buildExpenseEntriesForMonth(schedule, budget.month)[0];
+      return {
+        name: schedule.name,
+        category: category.name,
+        amount: monthlyEquivalent(schedule),
+        details: `${expenseFrequencyLabel(schedule.frequency)}${occurrence ? ` · ${displayDate(occurrence.date)}` : ''}`,
+        paused: Boolean(schedule.paused),
+        icon: '↻',
+        actions: `<button class="button button-secondary" data-action="edit-expense-schedule" data-schedule="${esc(schedule.id)}" type="button">Edit</button><button class="button button-secondary subscription-action-placeholder" type="button" aria-hidden="true" tabindex="-1" disabled>Schedule</button>`,
+      };
+    }),
+    ...standaloneEntries.map(({ category, entry }) => {
+      const date = entry.scheduledDate ?? entry.dueDate;
+      return {
+        name: entry.name,
+        category: category.name,
+        amount: entry.planned,
+        details: date ? `Due ${displayDate(date)}` : 'No due date',
+        paused: false,
+        icon: '◷',
+        actions: `<button class="button button-secondary" data-action="edit-entry" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Edit</button><button class="button button-secondary" data-action="schedule-subscription" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Schedule</button>`,
+      };
+    }),
+  ].sort((left, right) => left.name.localeCompare(right.name));
+  const calendarNotice = subscriptionItems.length && !events.length
+    ? '<div class="subscription-empty"><strong>No due dates this month</strong><p>Add a reminder date or recurring schedule to place subscriptions on the calendar.</p></div>'
     : '';
-  const noSubscriptions = !hasSubscriptions
-    ? '<div class="subscription-empty"><strong>No subscriptions yet</strong><p>Add a subscription with a due date or recurring schedule to see it on the calendar.</p></div>'
-    : !events.length
-      ? '<div class="subscription-empty"><strong>No due dates this month</strong><p>Add a reminder date or recurring schedule to place subscriptions on the calendar.</p></div>'
-      : '';
-  return `<section class="dashboard page-content subscription-page">${monthTabs(budget, budgets)}<div class="page-heading"><div><p class="panel-kicker">RENEWALS & DUE DATES</p><h1>Subscription Tracking</h1><p class="heading-subtitle">${events.length} due ${events.length === 1 ? 'date' : 'dates'} · ${fmt(monthlyTotal)} monthly estimate</p></div><div class="heading-actions">${budget.expenseSchedules.length ? '<button class="button button-secondary" data-action="manage-expense-schedules">Manage schedules</button>' : ''}<button class="button button-primary" data-action="add-subscription">+ Add subscription</button></div></div>${noSubscriptions}<section class="subscription-calendar" aria-label="${esc(monthText(budget.month))} subscription calendar"><div class="calendar-weekdays">${weekdays.map((day) => `<span>${day}</span>`).join('')}</div><div class="calendar-grid">${cells.join('')}</div></section>${undatedList}</section>`;
+  const listPanel = `<section class="subscription-list-panel" aria-label="All subscriptions"><div class="subscription-list-heading"><div><p class="panel-kicker">YOUR RECURRING COSTS</p><h2>All subscriptions</h2><p>${subscriptionItems.length} ${subscriptionItems.length === 1 ? 'subscription' : 'subscriptions'}</p></div></div>${subscriptionItems.length
+    ? `<div class="subscription-list">${subscriptionItems.map((item) => `<div class="subscription-row"><span class="subscription-icon" aria-hidden="true">${item.icon}</span><div class="subscription-copy"><strong>${esc(item.name)}${item.paused ? '<span class="subscription-paused">Paused</span>' : ''}</strong><small>${esc(item.category)} · ${esc(item.details)}</small></div><div class="subscription-cost"><strong>${fmt(item.amount)}</strong></div><div class="subscription-row-actions">${item.actions}</div></div>`).join('')}</div>`
+    : '<div class="subscription-empty"><strong>No subscriptions yet</strong><p>Add a subscription with a due date or recurring schedule to see it here.</p></div>'}</section>`;
+  return `<section class="dashboard page-content subscription-page">${monthTabs(budget, budgets)}<div class="page-heading"><div><p class="panel-kicker">RENEWALS & DUE DATES</p><h1>Subscription Tracking</h1><p class="heading-subtitle">${events.length} due ${events.length === 1 ? 'date' : 'dates'} · ${fmt(monthlyTotal)} monthly estimate</p></div><div class="heading-actions">${budget.expenseSchedules.length ? '<button class="button button-secondary" data-action="manage-expense-schedules">Manage schedules</button>' : ''}<button class="button button-primary" data-action="add-subscription">+ Add subscription</button></div></div>${calendarNotice}<section class="subscription-calendar" aria-label="${esc(monthText(budget.month))} subscription calendar"><div class="calendar-weekdays">${weekdays.map((day) => `<span>${day}</span>`).join('')}</div><div class="calendar-grid">${cells.join('')}</div></section>${listPanel}</section>`;
 }
 
 function beginSubscriptionSetup(): void {
@@ -1369,6 +1405,38 @@ function removeExpenseSchedule(scheduleId: string, sourceBudget: Budget): void {
     budget.expenseSchedules = budget.expenseSchedules.filter((schedule) => schedule.id !== scheduleId);
   }
 }
+function snapshotExpenseSchedule(scheduleId: string, sourceBudget: Budget): ExpenseScheduleBudgetSnapshot[] {
+  return seriesBudgets(sourceBudget.seriesId).map((budget) => {
+    const scheduleIndex = budget.expenseSchedules.findIndex((item) => item.id === scheduleId);
+    const schedule = budget.expenseSchedules[scheduleIndex];
+    return {
+      budgetId: budget.id,
+      scheduleIndex,
+      schedule: schedule ? { ...schedule } : undefined,
+      entries: budget.categories.flatMap((category) => category.entries
+        .map((entry, index) => ({ categoryId: category.id, index, entry: { ...entry } }))
+        .filter(({ entry }) => entry.scheduleId === scheduleId)),
+    };
+  });
+}
+function restoreExpenseSchedule(scheduleId: string, snapshots: ExpenseScheduleBudgetSnapshot[]): void {
+  for (const snapshot of snapshots) {
+    const budget = state.budgets.find((item) => item.id === snapshot.budgetId);
+    if (!budget) continue;
+    const savedEntryIds = new Set(snapshot.entries.map(({ entry }) => entry.id));
+    for (const category of budget.categories) {
+      category.entries = category.entries.filter((entry) => !savedEntryIds.has(entry.id));
+    }
+    if (snapshot.schedule) {
+      budget.expenseSchedules = budget.expenseSchedules.filter((item) => item.id !== scheduleId);
+      budget.expenseSchedules.splice(Math.max(0, snapshot.scheduleIndex), 0, snapshot.schedule);
+    }
+    for (const original of [...snapshot.entries].sort((left, right) => left.index - right.index)) {
+      const destination = budget.categories.find((item) => item.id === original.categoryId);
+      if (destination) destination.entries.splice(Math.min(original.index, destination.entries.length), 0, original.entry);
+    }
+  }
+}
 function transactionItemOptions(categoryId: string, selectedEntryId: string | null = null): string {
   const category = current()?.categories.find((item) => item.id === categoryId);
   return `<option value="" ${selectedEntryId ? '' : 'selected'}>Category only</option>${category?.entries.map((entry) => `<option value="${esc(entry.id)}" ${entry.id === selectedEntryId ? 'selected' : ''}>${esc(entry.name)}</option>`).join('') ?? ''}`;
@@ -1559,30 +1627,9 @@ document.addEventListener('click', (event: MouseEvent) => {
     const budget = current();
     const found = budget?.expenseSchedules.find((item) => item.id === schedule);
     if (budget && found && window.confirm(`Remove the recurring schedule for "${found.name}"? Future planned occurrences without actual activity will be removed.`)) {
-      const snapshots = seriesBudgets(budget.seriesId).map((monthBudget) => {
-        const monthSchedule = monthBudget.expenseSchedules.find((item) => item.id === schedule);
-        return {
-          budgetId: monthBudget.id,
-          scheduleIndex: monthBudget.expenseSchedules.findIndex((item) => item.id === schedule),
-          schedule: monthSchedule ? { ...monthSchedule } : undefined,
-          entries: monthBudget.categories.flatMap((item) => item.entries.map((scheduledEntry, index) => ({ categoryId: item.id, index, entry: { ...scheduledEntry } })).filter(({ entry: scheduledEntry }) => scheduledEntry.scheduleId === schedule)),
-        };
-      });
-
+      const snapshots = snapshotExpenseSchedule(schedule, budget);
       removeExpenseSchedule(schedule, budget);
-      offerUndo(`Schedule for "${found.name}" removed`, () => {
-        for (const snapshot of snapshots) {
-          const monthBudget = state.budgets.find((item) => item.id === snapshot.budgetId);
-          if (!monthBudget || !snapshot.schedule) continue;
-          for (const item of monthBudget.categories) item.entries = item.entries.filter((scheduledEntry) => !snapshot.entries.some(({ entry: original }) => original.id === scheduledEntry.id));
-          monthBudget.expenseSchedules = monthBudget.expenseSchedules.filter((item) => item.id !== schedule);
-          monthBudget.expenseSchedules.splice(Math.max(0, snapshot.scheduleIndex), 0, snapshot.schedule);
-          for (const original of [...snapshot.entries].sort((left, right) => left.index - right.index)) {
-            const destination = monthBudget.categories.find((item) => item.id === original.categoryId);
-            if (destination) destination.entries.splice(Math.min(original.index, destination.entries.length), 0, original.entry);
-          }
-        }
-      });
+      offerUndo(`Schedule for "${found.name}" removed`, () => restoreExpenseSchedule(schedule, snapshots));
       persist(); dialog.close(); render();
     }
   }
@@ -1603,22 +1650,33 @@ document.addEventListener('click', (event: MouseEvent) => {
       wizardView();
     }
   }
-  if (action === 'delete-entry' && entry && window.confirm('Delete this budget entry? Its linked transactions will also be removed.')) {
+  if (action === 'delete-entry' && entry) {
     const budget = current();
     if (budget) {
       const location = budget.categories.flatMap((item) => item.entries.map((budgetEntry, index) => ({ category: item, entry: budgetEntry, index }))).find((item) => item.entry.id === entry);
-      const deletedTransactions = budget.transactions.map((item, index) => ({ transaction: item, index })).filter(({ transaction: item }) => item.entryId === entry);
       if (location) {
+        const scheduleId = location.entry.scheduleId;
+        const schedule = scheduleId
+          ? seriesBudgets(budget.seriesId).flatMap((item) => item.expenseSchedules).find((item) => item.id === scheduleId)
+          : undefined;
+        const confirmation = schedule
+          ? `Delete "${location.entry.name}" and stop its recurring schedule for "${schedule.name}"? Future planned occurrences without actual activity will be removed. Its linked transactions will also be removed.`
+          : 'Delete this budget entry? Its linked transactions will also be removed.';
+        if (!window.confirm(confirmation)) return;
+        const snapshots = schedule ? snapshotExpenseSchedule(schedule.id, budget) : [];
+        const deletedTransactions = budget.transactions.map((item, index) => ({ transaction: item, index })).filter(({ transaction: item }) => item.entryId === entry);
+        if (schedule) removeExpenseSchedule(schedule.id, budget);
         location.category.entries = location.category.entries.filter((item) => item.id !== entry);
+        budget.transactions = budget.transactions.filter((transaction) => transaction.entryId !== entry);
+        offerUndo(`"${location.entry.name}" deleted${schedule ? ' with its recurring schedule' : ''}`, () => {
+          if (schedule) restoreExpenseSchedule(schedule.id, snapshots);
+          const destination = budget.categories.find((item) => item.id === location.category.id);
+          if (destination && !destination.entries.some((item) => item.id === entry)) {
+            destination.entries.splice(Math.min(location.index, destination.entries.length), 0, location.entry);
+          }
+          restoreDeletedTransactions(budget, deletedTransactions);
+        });
       }
-      budget.transactions = budget.transactions.filter((transaction) => transaction.entryId !== entry);
-      if (location) offerUndo(`"${location.entry.name}" deleted`, () => {
-        const destination = budget.categories.find((item) => item.id === location.category.id);
-        if (destination && !destination.entries.some((item) => item.id === entry)) {
-          destination.entries.splice(Math.min(location.index, destination.entries.length), 0, location.entry);
-        }
-        restoreDeletedTransactions(budget, deletedTransactions);
-      });
     }
     persist(); dialog.close(); render();
   }
