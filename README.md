@@ -62,7 +62,7 @@ Schedule a planned expense from its category for a weekly, biweekly, monthly, or
 
 ### Review progress and reports
 
-The dashboard summarizes income, allocation, and top spending. **Monthly Check-in** shows live income and spending totals, remaining category plans, notable variances, and the largest recorded transactions. Calendar progress is shown as context, not a forecast. Creating the next month closes out the previous month for **Reports**; closed months remain editable, and reports reflect the latest saved data.
+The dashboard summarizes income, allocation, and top spending. **Monthly Check-in** shows live income and spending totals, remaining category plans, notable variances, and the largest recorded transactions. Calendar progress is shown as context, not a forecast. Before creating a new month, a handoff summarizes the ending month’s category actuals, plan variances, unplanned transactions, and carryover. Creating the next month closes out the previous month for **Reports**; closed months remain editable, and reports reflect the latest saved data.
 
 **Reports** provides Budget Performance, Cash Flow & Leftover Income, Spending Trends, and Where Your Money Went for the available months in your budget series. The spending breakdown compares recorded income with total outflow and ranks budget items from highest to lowest; outflow includes savings and debt activity as well as expenses.
 

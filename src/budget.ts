@@ -1419,7 +1419,7 @@ function categoryCard(g: BudgetGroup, budget: Budget): string {
   return `<section class="category-card" data-category-group="${esc(g.id)}"><header class="category-header"><span class="category-symbol ${g.color}">${symbol}</span><div class="category-heading"><h3>${esc(g.name)}</h3><span>${entries.length} ${entries.length === 1 ? 'item' : 'items'}</span></div><div class="category-total"><strong>${fmt(planned)}</strong><small>planned</small></div></header><div class="category-progress"><span class="${actual > planned && g.id !== 'income' ? 'over-budget' : ''}" style="width:${planned ? Math.min(100, actual / planned * 100) : (actual ? 100 : 0)}%"></span></div>${body}<footer class="category-footer"><span>Actual ${fmt(actual)}</span><span class="${differenceClass}">${signed(actual - planned)} diff</span></footer></section>`;
 }
 
-function open(content: string): void { dialog.innerHTML = content; if (!dialog.open) dialog.showModal(); }
+function open(content: string): void { dialog.classList.remove('month-handoff-dialog'); dialog.innerHTML = content; if (!dialog.open) dialog.showModal(); }
 function newBudgetDialog(): void {
   if (state.budgets.length) return;
   open(`<form class="dialog-form" data-form="budget"><div class="dialog-topline"><span class="dialog-icon">◷</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">START YOUR BUDGET</p><h2>Set up your budget</h2><p class="dialog-copy">Choose the sections you want to include. Income is required; the others start selected and can be unchecked.</p><fieldset class="group-picker"><legend>Budget sections</legend>${GROUPS.map((g) => `<label class="group-option"><input type="checkbox" name="groups" value="${g.id}" ${g.id === 'income' ? 'checked disabled' : 'checked'}><span class="type-dot ${g.color}"></span><span>${g.name}</span>${g.id === 'income' ? '<small>Required</small>' : ''}</label>`).join('')}<div class="setup-group-add"><input id="setup-group-name" type="text" maxlength="40" placeholder="Add a custom section" aria-label="Custom section name"><button class="button button-secondary" type="button" data-action="add-setup-group">Add section</button></div><p class="setup-group-error" id="setup-group-error" role="status" aria-live="polite"></p></fieldset><div class="dialog-actions"><button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">Set up <span>→</span></button></div></form>`);
@@ -1560,6 +1560,65 @@ async function deleteBudget(): Promise<void> {
   selectedTransactionIds.clear();
   render();
 }
+function monthHandoffMarkup(budget: Budget): string {
+  const summary = totals(budget);
+  const categoryResults = budget.categories
+    .filter((category) => category.type !== 'income')
+    .map((category) => {
+      const values = categoryTotals(budget, category);
+      return { name: category.name, ...values, difference: values.actual - values.planned };
+    })
+    .filter((item) => item.planned !== 0 || item.actual !== 0);
+  const overPlan = categoryResults
+    .filter((item) => item.difference > 0.01)
+    .sort((left, right) => right.difference - left.difference)
+    .slice(0, 3);
+  const underPlan = categoryResults
+    .filter((item) => item.difference < -0.01)
+    .sort((left, right) => left.difference - right.difference)
+    .slice(0, 3);
+  const varianceList = (items: typeof categoryResults, direction: 'over' | 'under'): string => items.length
+    ? `<ul>${items.map((item) => `<li><span><strong>${esc(item.name)}</strong><small>${fmt(item.actual)} actual · ${fmt(item.planned)} planned</small></span><strong class="${direction === 'over' ? 'negative' : 'positive'}">${fmt(Math.abs(item.difference))} ${direction}</strong></li>`).join('')}</ul>`
+    : `<p class="month-handoff-empty">No categories are ${direction} plan.</p>`;
+  const categoryById = new Map(budget.categories.map((category) => [category.id, category]));
+  const spendingTransactions = budget.transactions
+    .filter((transaction) => {
+      const category = categoryById.get(transaction.categoryId);
+      return category !== undefined && category.type !== 'income';
+    })
+    .sort((left, right) => right.amount - left.amount);
+  const unplannedTransactions = spendingTransactions.filter((transaction) => !transaction.entryId);
+  const unplannedTotal = unplannedTransactions.reduce((sum, transaction) => sum + transaction.amount, 0);
+  const unplannedByCategory = new Map<string, { name: string; total: number; transactions: BudgetTransaction[] }>();
+  for (const transaction of unplannedTransactions) {
+    const category = categoryById.get(transaction.categoryId);
+    if (!category) continue;
+    const group = unplannedByCategory.get(category.id) ?? { name: category.name, total: 0, transactions: [] };
+    group.total += transaction.amount;
+    group.transactions.push(transaction);
+    unplannedByCategory.set(category.id, group);
+  }
+  const unplannedGroups = [...unplannedByCategory.values()]
+    .map((group) => ({ ...group, transactions: group.transactions.sort((left, right) => right.amount - left.amount) }))
+    .sort((left, right) => right.total - left.total);
+  return `<section class="month-handoff" aria-label="Month handoff summary">
+    <div class="month-handoff-stats">
+      <article><span>Category actuals</span><strong>${fmt(summary.out.actual)}</strong><small>actual · ${fmt(summary.out.planned)} planned</small></article>
+      <article><span>Unplanned spending</span><strong>${fmt(unplannedTotal)}</strong><small>${unplannedTransactions.length} ${unplannedTransactions.length === 1 ? 'transaction' : 'transactions'}</small></article>
+    </div>
+    <div class="month-handoff-columns">
+      <section><h3>Over plan</h3>${varianceList(overPlan, 'over')}</section>
+      <section><h3>Under plan</h3>${varianceList(underPlan, 'under')}</section>
+    </div>
+    <section class="month-handoff-unplanned">
+      <div class="month-handoff-unplanned-heading"><div><h3>Unplanned activity</h3><p>Transactions without a budget item; their amounts are included in category actuals.</p></div><span class="count-badge">${unplannedTransactions.length}</span></div>
+      ${unplannedGroups.length
+        ? `<div class="month-handoff-unplanned-groups">${unplannedGroups.map((group) => `<section class="month-handoff-unplanned-group"><h4><span>${esc(group.name)}</span><strong>${fmt(group.total)}</strong></h4><ul>${group.transactions.map((transaction) => `<li><span><strong>${esc(transaction.description)}</strong><small>${esc(displayDate(transaction.date))}</small></span><strong>${fmt(transaction.amount)}</strong></li>`).join('')}</ul></section>`).join('')}</div>`
+        : '<p class="month-handoff-empty">No unplanned spending transactions.</p>'}
+    </section>
+  </section>`;
+}
+
 function newMonthDialog(): void {
   const source = latestInSeries(current()?.seriesId);
   if (!source) return;
@@ -1570,7 +1629,8 @@ function newMonthDialog(): void {
     : 'actual leftover (actual income and carryover minus actual spending)';
   const carryoverLabel = carryoverMethod === 'planned' ? 'Planned unallocated income' : 'Actual leftover';
   const month = monthAfter(source.month);
-  open(`<form class="dialog-form" data-form="month" data-source="${esc(source.id)}"><div class="dialog-topline"><span class="dialog-icon">◷</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">CLOSE ${esc(monthText(source.month).toUpperCase())}</p><h2>Create the next month?</h2><p class="dialog-copy">This closes out ${esc(monthText(source.month))} for Reports. You can still edit it later, and reports will use the latest saved data. Planned categories and amounts will carry forward, actuals will reset to zero, and ${carryoverDescription} will become the next month’s carryover.</p><label for="new-month">New month</label><input id="new-month" name="month" type="month" value="${month}" required><p class="carryover-preview">${carryoverLabel} to next month <strong>${fmt(carryover)}</strong></p><p class="form-error" id="month-error" aria-live="polite"></p><div class="dialog-actions"><button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">Confirm and create month <span>→</span></button></div></form>`);
+  open(`<form class="dialog-form" data-form="month" data-source="${esc(source.id)}"><div class="dialog-topline"><span class="dialog-icon">◷</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">MONTH HANDOFF · ${esc(monthText(source.month).toUpperCase())}</p><h2>Review before moving on</h2><p class="dialog-copy">Here’s a factual snapshot of ${esc(monthText(source.month))} before you create another month. Creating it closes this month for Reports; you can still edit either month later.</p>${monthHandoffMarkup(source)}<label for="new-month">New month</label><input id="new-month" name="month" type="month" value="${month}" required><p class="carryover-preview">${carryoverLabel} to next month <strong>${fmt(carryover)}</strong></p><p class="dialog-copy month-handoff-note">${carryoverDescription} will become the next month’s carryover. Planned amounts carry forward and actuals reset; you can adjust the new plan after it is created.</p><p class="form-error" id="month-error" aria-live="polite"></p><div class="dialog-actions"><button class="button button-secondary" data-action="close" type="button">Not now</button><button class="button button-primary" type="submit">Create next month <span>→</span></button></div></form>`);
+  dialog.classList.add('month-handoff-dialog');
 }
 function expenseScheduleDialog(categoryId: string, schedule?: RecurringExpenseSchedule, sourceEntry?: BudgetEntry): void {
   const budget = current();

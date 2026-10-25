@@ -1431,6 +1431,181 @@
   line-height: 1.5;
 }
 
+.month-handoff {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 5px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.dialog.month-handoff-dialog {
+  width: min(800px, calc(100vw - 28px));
+}
+
+.month-handoff-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 7px;
+}
+
+.month-handoff-stats article {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.month-handoff-stats span,
+.month-handoff-stats small,
+.month-handoff-empty,
+.month-handoff li small {
+  color: var(--muted);
+  font-size: calc(10px * var(--text-scale, 1));
+  line-height: 1.4;
+}
+
+.month-handoff-stats span {
+  font-size: calc(11px * var(--text-scale, 1));
+}
+
+.month-handoff-stats strong {
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+  font-family: var(--mono);
+  font-size: calc(14px * var(--text-scale, 1));
+  font-weight: 500;
+}
+
+.month-handoff-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.month-handoff-columns > section,
+.month-handoff-unplanned {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.month-handoff-unplanned-heading,
+.month-handoff-unplanned-group h4 {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.month-handoff-unplanned-heading p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: calc(10px * var(--text-scale, 1));
+  line-height: 1.4;
+}
+
+.month-handoff-unplanned-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.month-handoff-unplanned-group {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.month-handoff-unplanned-group h4 {
+  align-items: baseline;
+  margin: 0;
+  color: var(--text-strong);
+  font-size: calc(11px * var(--text-scale, 1));
+}
+
+.month-handoff-unplanned-group h4 span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.month-handoff-unplanned-group h4 strong {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.month-handoff h3 {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: calc(12px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
+.month-handoff ul {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.month-handoff li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line-soft);
+  font-size: calc(11px * var(--text-scale, 1));
+}
+
+.month-handoff li span {
+  min-width: 0;
+}
+
+.month-handoff li span strong,
+.month-handoff li small {
+  display: block;
+}
+
+.month-handoff li span strong {
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+  font-weight: 500;
+}
+
+.month-handoff li > strong {
+  flex: 0 0 auto;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.month-handoff li > strong.negative {
+  color: var(--danger-text);
+}
+
+.month-handoff li > strong.positive {
+  color: var(--green-text);
+}
+
+.month-handoff-empty {
+  margin: 6px 0 0;
+}
+
+.month-handoff-note {
+  margin: 0;
+  font-size: calc(10px * var(--text-scale, 1));
+}
+
 .review-table {
   min-width: 620px;
 }
@@ -1738,6 +1913,10 @@
 }
 
 @media (max-width: 520px) {
+  .month-handoff-columns {
+    grid-template-columns: 1fr;
+  }
+
   .review-stats {
     grid-template-columns: 1fr;
   }
