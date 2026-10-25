@@ -2,12 +2,17 @@ name: Desktop Builds
 
 on:
   push:
+    branches:
+      - '**'
     tags:
-      - 'v*' # This forces the workflow to ONLY trigger when a tag like v1.1.4 is pushed
+      - 'v*'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  KESTRAL_BUILD_CHANNEL: ${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && 'stable' || 'dev' }}
 
 jobs:
   windows:
@@ -19,15 +24,24 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run desktop:dist
+      - name: Build stable Windows installer
+        if: env.KESTRAL_BUILD_CHANNEL == 'stable'
+        run: npm run desktop:dist
+        env:
+          AZURE_TENANT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).tenantId }}
+          AZURE_CLIENT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
+          AZURE_CLIENT_SECRET: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
+      - name: Build dev Windows installer
+        if: env.KESTRAL_BUILD_CHANNEL == 'dev'
+        run: npm run desktop:dist:dev
         env:
           AZURE_TENANT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).tenantId }}
           AZURE_CLIENT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
           AZURE_CLIENT_SECRET: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
       - uses: actions/upload-artifact@v4
         with:
-          name: KestralBudget-windows
-          path: release/windows/*.exe
+          name: KestralBudget-${{ env.KESTRAL_BUILD_CHANNEL }}-windows-${{ github.run_id }}
+          path: release/windows${{ env.KESTRAL_BUILD_CHANNEL == 'dev' && '-dev' || '' }}/*.exe
           if-no-files-found: error
 
   macos:
@@ -39,14 +53,16 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run icons
-      - run: iconutil -c icns assets/kestral-budget.iconset --output assets/kestral-budget.icns
-      - run: npm run build
-      - run: npx electron-builder --mac dmg --arm64 --config.directories.output=release/mac --publish never
+      - name: Build stable macOS installer
+        if: env.KESTRAL_BUILD_CHANNEL == 'stable'
+        run: npm run desktop:dist:mac
+      - name: Build dev macOS installer
+        if: env.KESTRAL_BUILD_CHANNEL == 'dev'
+        run: npm run desktop:dist:mac:dev
       - uses: actions/upload-artifact@v4
         with:
-          name: KestralBudget-mac-arm64
-          path: release/mac/*.dmg
+          name: KestralBudget-${{ env.KESTRAL_BUILD_CHANNEL }}-mac-arm64-${{ github.run_id }}
+          path: release/mac${{ env.KESTRAL_BUILD_CHANNEL == 'dev' && '-dev' || '' }}/*.dmg
           if-no-files-found: error
 
   publish-release:
@@ -58,11 +74,11 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: KestralBudget-windows
+          name: KestralBudget-stable-windows-${{ github.run_id }}
           path: release/windows
       - uses: actions/download-artifact@v4
         with:
-          name: KestralBudget-mac-arm64
+          name: KestralBudget-stable-mac-arm64-${{ github.run_id }}
           path: release/mac
       - uses: softprops/action-gh-release@v2
         with:

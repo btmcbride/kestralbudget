@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://github.com/btmcbride/kestralbudget/releases/latest">Download</a>
   · <a href="#budgeting-that-works-your-way">Features</a>
+  · <a href="#core-workflows">How to use</a>
   · <a href="#why-kestral-budget">Why Kestral?</a>
   · <a href="#self-host">Self-host</a>
 </p>
@@ -39,7 +40,35 @@ Kestral Budget brings your monthly plan and actual spending together. Plan incom
 - **Shape your setup:** Organize your budget with the categories, sections, and items that make sense to you. Choose your currency, date format, theme, and layout.
 - **Track the details:** Log transactions against budget items, then search, filter, sort, and manage activity in bulk.
 - **Keep due dates visible:** Add due dates to bills, subscriptions, and debts, and see upcoming subscriptions on a calendar.
-- **Learn from the numbers:** Use Budget Performance, Cash Flow & Leftover Income, and Spending Trends reports to explore your budget over time.
+- **Learn from the numbers:** Use Budget Performance, Cash Flow & Leftover Income, Spending Trends, and Where Your Money Went reports to explore your budget over time.
+
+## Core workflows
+
+After creating a budget, choose **App tour** in the sidebar to see the main workflows in context. You can replay the tour at any time.
+
+### Set up a monthly plan
+
+Create a budget by choosing the sections you want to use, then add categories and budget items with planned amounts. The dashboard compares your plan with actual activity and shows unallocated income. Add months as you go; planned items carry forward, actuals reset, and carryover follows the method selected in Settings.
+
+Click a budget item to review its transaction history. Use the separate pencil button to edit the item without opening its history. Savings items also support optional goals and deposit tracking.
+
+### Record and review transactions
+
+Use **Quick Transaction** on the dashboard or **Add transaction** on the Transactions page to record income or spending and assign it to a category and budget item. For activity without a matching planned item, choose **No budget item — unplanned**; it still counts toward the category’s actuals and appears in the Monthly Check-in. From Transactions, search immediately or expand **Filters and sorting** to narrow or reorder activity. Select visible transactions to reveal bulk-selection actions; edit or delete individual records from the table.
+
+### Plan recurring costs and renewals
+
+Schedule a planned expense from its category for a weekly, biweekly, monthly, or yearly frequency. The schedule adds planned items to eligible months; record actual spending separately as transactions. **Subscription Tracking** shows the next due dates alongside a monthly calendar, estimates monthly costs, and lets you manage or pause schedules.
+
+### Review progress and reports
+
+The dashboard summarizes income, allocation, and a short top-spending preview; expand **At-A-Glance** to see income and category details. **Monthly Check-in** shows live income and spending totals, remaining category plans, notable variances, and the largest recorded transactions. Income and transaction tables can be expanded when needed. Calendar progress is shown as context, not a forecast. Before creating a new month, a handoff summarizes the ending month’s category actuals, plan variances, unplanned transactions, and carryover. Creating the next month closes out the previous month for **Reports**; closed months remain editable, and reports reflect the latest saved data.
+
+**Reports** provides Budget Performance, Cash Flow & Leftover Income, Spending Trends, and Where Your Money Went for the available months in your budget series. The spending breakdown compares recorded income with total outflow and ranks budget items from highest to lowest; outflow includes savings and debt activity as well as expenses.
+
+### Personalize and protect your data
+
+In **Settings**, choose a theme, accent color, text size, and layout density, plus currency, date format, calendar week start, and the carryover method. Currency settings change how amounts display; they do not convert values. Budget data is saved on this device. Use **Data and backups** to export a backup file to a location you choose or import one to restore or move data; backups are manual.
 
 ## Why Kestral Budget?
 
@@ -142,7 +171,10 @@ Open `http://localhost:8080`. Stop it with `podman compose down`; the named volu
 
 ## Data and privacy
 
-Kestral Budget has no accounts, bank connections, cloud sync, or automatic backups. The desktop app stores data on your computer; the self-hosted edition stores it in its configured database volume. Keep independent backups of important data.
+Kestral Budget has no accounts, bank connections, cloud sync, or automatic backups. The desktop app stores data on your computer; the self-hosted edition stores it in its configured database volume. Optional AI notes run on the computer hosting the app and use no hosted AI provider. Keep independent backups of important data.
+
+### Removing optional AI components
+
 
 ## License
 

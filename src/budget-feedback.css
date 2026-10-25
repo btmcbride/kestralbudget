@@ -1,5 +1,8 @@
 .unallocated-note{display:flex;align-items:flex-start;gap:6px;margin:9px 0 0;color:#d7b86a;font-size:calc(9px * var(--text-scale, 1));line-height:1.35}.unallocated-note span{flex:0 0 auto;font-size:calc(14px * var(--text-scale, 1));line-height:10px}
-.entry-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(80px,auto) minmax(70px,auto) minmax(70px,auto);gap:18px;padding:1px 4px 3px;color:var(--muted);font-size:calc(10px * var(--text-scale, 1));font-weight:600;text-align:right}.entry-columns span:first-child{text-align:left}.entry-due{overflow:hidden;color:var(--muted);font-size:calc(9px * var(--text-scale, 1));text-align:right;text-overflow:ellipsis;white-space:nowrap}.entry-row{grid-template-columns:minmax(0,1fr) minmax(80px,auto) minmax(70px,auto) minmax(70px,auto);gap:18px}
+.entry-line{display:flex;align-items:center;gap:4px}.entry-line .entry-row{flex:1;min-width:0}.entry-edit{width:24px;height:24px;flex:0 0 auto;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--muted);cursor:pointer}.entry-edit:hover{border-color:var(--line);background:var(--line-soft);color:var(--text)}.entry-columns{margin-right:28px}.entry-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(80px,auto) minmax(70px,auto) minmax(70px,auto);gap:18px;padding:1px 4px 3px;color:var(--muted);font-size:calc(10px * var(--text-scale, 1));font-weight:600;text-align:right}.entry-columns span:first-child{text-align:left}.entry-due{overflow:hidden;color:var(--muted);font-size:calc(9px * var(--text-scale, 1));text-align:right;text-overflow:ellipsis;white-space:nowrap}.entry-row{grid-template-columns:minmax(0,1fr) minmax(80px,auto) minmax(70px,auto) minmax(70px,auto);gap:18px}
+.entry-history-list{max-height:min(360px,42vh);overflow-y:auto;overscroll-behavior:contain;padding-right:4px}.entry-history-row{display:grid;min-height:52px;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:8px 14px 8px 0;border-bottom:1px solid var(--line-soft)}.entry-history-description{display:grid;min-width:0;gap:3px}.entry-history-description strong{overflow-wrap:anywhere;color:var(--text-soft);font-size:calc(11px * var(--text-scale, 1))}.entry-history-description small{color:var(--muted);font-size:calc(10px * var(--text-scale, 1))}.entry-history-amount{color:var(--text-soft);font-size:calc(11px * var(--text-scale, 1));text-align:right;white-space:nowrap}.entry-history-row .text-action{min-width:32px}
+@media(max-width:1020px){.category-grid{grid-template-columns:1fr}}
+@media(max-width:430px){.entry-history .dialog-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);width:100%;min-width:0}.entry-history .dialog-actions>:first-child:not(:last-child){grid-column:1/-1;margin-right:0}.entry-history .dialog-actions button{min-width:0;padding-right:8px;padding-left:8px}}
 /* iOS Safari zooms the page when a focused field has text smaller than 16px. */
 @media(pointer:coarse){input,select,textarea{font-size:16px!important}}
 
@@ -10,7 +13,6 @@
   .budget-tabs{overflow-x:auto;scrollbar-width:none}
   .metric-grid{grid-template-columns:1fr 1fr}
   .metric-card:nth-child(odd){border-right:1px solid var(--line)}
-  .metric-card:nth-child(3){grid-column:1/-1;border-right:0}
 
   .entry-row,.entry-columns{grid-template-columns:minmax(0,1fr) minmax(64px,auto) minmax(58px,auto) minmax(58px,auto);gap:8px}
   .entry-name{min-width:0;overflow-wrap:anywhere}
@@ -60,9 +62,6 @@
   .primary-nav{order:0;display:flex;flex:0 0 auto;flex-direction:column;align-items:stretch;
     gap:4px;width:100%;min-width:0;overflow:visible;margin:4px 0}
   .primary-nav .sidebar-nav-item{width:100%;min-height:44px;justify-content:flex-start;padding:0 12px;font-size:14px}
-  .sidebar .backup-actions{order:0;flex:0 0 auto;display:grid;grid-template-columns:1fr 1fr;width:100%;
-    gap:7px;margin:0;padding:12px 0;border-top:1px solid var(--line-soft)}
-  .sidebar .backup-actions button{min-height:38px;font-size:12px}
   .sidebar-footer{order:0;display:flex;flex:0 0 auto;flex-direction:column;align-items:stretch;gap:4px;
     width:100%;margin-top:auto;padding-top:12px;border-top:1px solid var(--line-soft)}
   .sidebar-footer .sidebar-nav-item{width:100%;height:44px;min-height:44px;justify-content:flex-start;
@@ -84,3 +83,47 @@
 @media(prefers-reduced-motion:reduce){
   .sidebar,.mobile-nav-backdrop{transition:none}
 }
+
+.transaction-tools{
+  grid-template-columns:minmax(0,1fr) minmax(190px,.55fr);
+  align-items:start;
+}
+.transaction-search{grid-column:1}
+.transaction-advanced-filters{grid-column:2;min-width:0}
+.transaction-advanced-filters>summary{
+  display:flex;min-height:36px;align-items:center;justify-content:space-between;gap:10px;
+  padding:0 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);
+  color:var(--text-soft);font-size:calc(12px * var(--text-scale, 1));cursor:pointer;list-style:none
+}
+.transaction-advanced-filters>summary::-webkit-details-marker{display:none}
+.transaction-advanced-filters>summary::after{content:"+";color:var(--muted);font-size:16px}
+.transaction-advanced-filters[open]>summary::after{content:"−"}
+.transaction-filter-controls{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding-top:10px
+}
+.transaction-bulk{grid-column:1/-1}
+.transaction-bulk .button{flex:0 0 auto}
+
+@media(max-width:900px){
+  .transaction-tools{grid-template-columns:minmax(0,1fr) minmax(0,.8fr)}
+  .transaction-filter-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+@media(max-width:720px){
+  .transaction-tools{grid-template-columns:minmax(0,1fr)}
+  .transaction-search,.transaction-advanced-filters,.transaction-bulk{grid-column:1}
+  .transaction-filter-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .transaction-bulk span{flex:0 1 auto}
+}
+
+@media(max-width:430px){
+  .transaction-filter-controls{grid-template-columns:minmax(0,1fr)}
+  .transaction-bulk{gap:8px}
+}
+
+.category-card .entry-due{font-size:calc(10px * var(--text-scale, 1))}
+.category-card .entry-columns{font-size:calc(11px * var(--text-scale, 1))}
+.unallocated-note{font-size:calc(11px * var(--text-scale, 1))}
+.transaction-filter{font-size:calc(11px * var(--text-scale, 1))}
+.transaction-filter input,.transaction-filter select{font-size:calc(12px * var(--text-scale, 1))}
+.transaction-bulk>span,.transaction-bulk .button{font-size:calc(11px * var(--text-scale, 1))}
