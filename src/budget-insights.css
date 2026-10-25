@@ -1199,6 +1199,299 @@
   }
 }
 
+:root,
+:root[data-theme="dark"] {
+  --faint: #8b949e;
+  --success-text: #56d364;
+}
+
+:root[data-theme="light"] {
+  --faint: #626b75;
+  --success-text: #1a7f37;
+}
+
+.positive {
+  color: var(--success-text) !important;
+}
+
+.review-highlight.positive > strong {
+  color: var(--success-text);
+}
+
+.panel-kicker {
+  font-size: calc(10px * var(--text-scale, 1));
+}
+
+.metric-label,
+.metric-foot {
+  font-size: calc(11px * var(--text-scale, 1));
+}
+
+.sidebar-bottom,
+.entry-due,
+.summary-disclosure > summary > span small,
+.summary-disclosure th,
+.calendar-weekdays span,
+.calendar-date,
+.calendar-event small,
+.report-table thead th,
+.report-type-tag,
+.review-caveat,
+.review-progress small {
+  font-size: calc(10px * var(--text-scale, 1));
+}
+
+.entry-columns {
+  font-size: calc(11px * var(--text-scale, 1));
+}
+
+.summary-disclosure > summary {
+  position: relative;
+  padding-left: 40px;
+  list-style: none;
+}
+
+.summary-disclosure > summary::-webkit-details-marker,
+.review-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.summary-disclosure > summary::before {
+  position: absolute;
+  left: 10px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--muted);
+  content: "+";
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  line-height: 1;
+  text-align: center;
+}
+
+.summary-disclosure[open] > summary::before {
+  content: "−";
+}
+
+.month-toolbar .month-add {
+  flex: 0 0 auto;
+}
+
+.month-add {
+  display: inline-flex;
+  width: auto;
+  min-width: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+}
+
+.month-add-label {
+  font-size: calc(11px * var(--text-scale, 1));
+  white-space: nowrap;
+}
+
+.top-spending .panel-heading-actions {
+  align-items: center;
+  gap: 10px;
+}
+
+.top-spending .panel-heading-actions .text-action {
+  white-space: nowrap;
+}
+
+.top-list {
+  max-height: none;
+  overflow: visible;
+}
+
+:root .review-page .review-collapsible > summary {
+  position: relative;
+  padding-right: 17px;
+  padding-left: 52px;
+  cursor: pointer;
+  list-style: none;
+}
+
+:root .review-page .review-collapsible > summary::after {
+  position: absolute;
+  left: 17px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--muted);
+  content: "+";
+  font-size: 14px;
+  line-height: 1;
+}
+
+.review-collapsible[open] > summary {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.review-collapsible[open] > summary::after {
+  content: "−";
+}
+
+.review-section-meta {
+  color: var(--muted);
+  font-size: calc(11px * var(--text-scale, 1));
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.subscription-overview {
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+  align-items: start;
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.subscription-agenda {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.subscription-agenda-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.subscription-agenda-heading h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-family: Manrope, sans-serif;
+  font-size: calc(16px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
+.subscription-agenda-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.subscription-agenda-item {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--text-soft);
+  text-align: left;
+  cursor: pointer;
+}
+
+.subscription-agenda-item:hover {
+  color: var(--text-strong);
+}
+
+.subscription-agenda-item > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.subscription-agenda-item strong {
+  overflow: hidden;
+  font-size: calc(12px * var(--text-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subscription-agenda-item small {
+  color: var(--muted);
+  font-size: calc(11px * var(--text-scale, 1));
+}
+
+.subscription-agenda-item > strong {
+  flex: 0 0 auto;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.subscription-agenda .subscription-empty {
+  margin: 0;
+  padding: 10px 0 0;
+  border: 0;
+  font-size: calc(12px * var(--text-scale, 1));
+}
+
+.subscription-calendar {
+  min-width: 0;
+}
+
+.calendar-day {
+  min-height: 104px;
+}
+
+@media (max-width: 900px) {
+  .subscription-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .month-add-label {
+    display: none;
+  }
+
+  .month-add {
+    padding: 0 8px;
+  }
+
+  .summary-disclosure table {
+    min-width: 520px;
+  }
+
+  :root .review-page .review-collapsible > summary {
+    padding-right: 12px;
+    padding-left: 46px;
+  }
+
+  :root .review-page .review-collapsible > summary::after {
+    left: 12px;
+  }
+}
+
+@media (max-width: 430px) {
+  .calendar-day {
+    min-height: 78px;
+  }
+
+  .calendar-event strong {
+    font-size: calc(9px * var(--text-scale, 1));
+  }
+}
+
+@media (max-width: 720px) {
+  .calendar-day {
+    min-height: 78px;
+  }
+}
+
 .review-stats > article {
   display: grid;
   min-width: 0;

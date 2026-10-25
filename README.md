@@ -54,21 +54,21 @@ Click a budget item to review its transaction history. Use the separate pencil b
 
 ### Record and review transactions
 
-Use **Quick Transaction** on the dashboard or **Add transaction** on the Transactions page to record income or spending and assign it to a category and budget item. For activity without a matching planned item, choose **No budget item — unplanned**; it still counts toward the category’s actuals and appears in the Monthly Check-in. From Transactions, search, filter, sort, edit or delete individual records, and select transactions for bulk deletion.
+Use **Quick Transaction** on the dashboard or **Add transaction** on the Transactions page to record income or spending and assign it to a category and budget item. For activity without a matching planned item, choose **No budget item — unplanned**; it still counts toward the category’s actuals and appears in the Monthly Check-in. From Transactions, search immediately or expand **Filters and sorting** to narrow or reorder activity. Select visible transactions to reveal bulk-selection actions; edit or delete individual records from the table.
 
 ### Plan recurring costs and renewals
 
-Schedule a planned expense from its category for a weekly, biweekly, monthly, or yearly frequency. The schedule adds planned items to eligible months; record actual spending separately as transactions. **Subscription Tracking** puts renewal dates on a monthly calendar, estimates monthly costs, and lets you manage or pause schedules.
+Schedule a planned expense from its category for a weekly, biweekly, monthly, or yearly frequency. The schedule adds planned items to eligible months; record actual spending separately as transactions. **Subscription Tracking** shows the next due dates alongside a monthly calendar, estimates monthly costs, and lets you manage or pause schedules.
 
 ### Review progress and reports
 
-The dashboard summarizes income, allocation, and top spending. **Monthly Check-in** shows live income and spending totals, remaining category plans, notable variances, and the largest recorded transactions. Calendar progress is shown as context, not a forecast. Before creating a new month, a handoff summarizes the ending month’s category actuals, plan variances, unplanned transactions, and carryover. Creating the next month closes out the previous month for **Reports**; closed months remain editable, and reports reflect the latest saved data.
+The dashboard summarizes income, allocation, and a short top-spending preview; expand **At-A-Glance** to see income and category details. **Monthly Check-in** shows live income and spending totals, remaining category plans, notable variances, and the largest recorded transactions. Income and transaction tables can be expanded when needed. Calendar progress is shown as context, not a forecast. Before creating a new month, a handoff summarizes the ending month’s category actuals, plan variances, unplanned transactions, and carryover. Creating the next month closes out the previous month for **Reports**; closed months remain editable, and reports reflect the latest saved data.
 
 **Reports** provides Budget Performance, Cash Flow & Leftover Income, Spending Trends, and Where Your Money Went for the available months in your budget series. The spending breakdown compares recorded income with total outflow and ranks budget items from highest to lowest; outflow includes savings and debt activity as well as expenses.
 
 ### Personalize and protect your data
 
-In **Settings**, choose a theme, accent color, text size, and layout density, plus currency, date format, calendar week start, and the carryover method. Currency settings change how amounts display; they do not convert values. Export a backup regularly and import one to restore or move data. Backups are manual.
+In **Settings**, choose a theme, accent color, text size, and layout density, plus currency, date format, calendar week start, and the carryover method. Currency settings change how amounts display; they do not convert values. Budget data is saved on this device. Use **Data and backups** to export a backup file to a location you choose or import one to restore or move data; backups are manual.
 
 ## Why Kestral Budget?
 

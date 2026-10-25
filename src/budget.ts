@@ -199,18 +199,18 @@ const EXPENSE_FREQUENCIES: Array<{ value: ExpenseFrequency; label: string; descr
 const GUIDED_TOUR_STEPS: Array<{ selector: string; fallbackSelector?: string; view: AppState['view']; title: string; body: string }> = [
   { selector: '.budget-tabs', view: 'dashboard', title: 'Plan month by month', body: 'Switch between monthly budgets or add a month to close out the current one for Reports. Planned items carry forward, actuals start fresh, and the new month uses your selected carryover rule.' },
   { selector: '.metric-grid', view: 'dashboard', title: 'See what is available', body: 'Compare planned income and carryover with unallocated funds, planned category allocations, and actual spending.' },
-  { selector: '.at-a-glance .summary-disclosure', view: 'dashboard', title: 'Check your monthly summary', body: 'Expand Income and Categories to compare planned amounts, actuals, and differences. Top spending highlights the largest recorded expenses.' },
+  { selector: '.at-a-glance .summary-disclosure', view: 'dashboard', title: 'Check your monthly summary', body: 'Expand Income and Categories to compare planned amounts, actuals, and differences. Top spending previews a few of the largest recorded expenses.' },
   { selector: '.categories-section .section-title-row', view: 'dashboard', title: 'Build your budget plan', body: 'Create categories and add budget items for income, bills, expenses, subscriptions, debts, or savings. Items keep planned amounts separate from recorded activity.' },
   { selector: '.entry-line', fallbackSelector: '.categories-section .section-title-row', view: 'dashboard', title: 'Review and edit an item', body: 'Click a budget item to open its history, then edit a transaction there if needed. Use the separate pencil button to update the budget item.' },
   { selector: '.category-card[data-category-group="savings"]', fallbackSelector: '.categories-section .section-title-row', view: 'dashboard', title: 'Set savings goals', body: 'If you use the Savings section, give an item one or more named goals with target amounts. Add deposits to track progress, and open the savings item to review its goals and deposits.' },
   { selector: '.categories-section .sub-category-actions [data-action="add-expense-schedule"]', fallbackSelector: '.categories-section .section-title-row', view: 'dashboard', title: 'Schedule recurring expenses', body: 'Use Schedule item beside a category to create weekly, biweekly, monthly, or yearly planned expenses. Manage schedules later from Subscription Tracking.' },
-  { selector: '.transactions-panel .transaction-tools', view: 'transactions', title: 'Find transactions', body: 'Search descriptions or dates, filter by category or budget item, and sort activity. Select visible transactions to manage several at once.' },
+  { selector: '.transactions-panel .transaction-tools', view: 'transactions', title: 'Find transactions', body: 'Search descriptions or dates. Expand Filters and sorting to narrow or reorder activity, then select visible transactions to manage several at once.' },
   { selector: '.transactions-panel .panel-heading-actions', view: 'transactions', title: 'Record and manage activity', body: 'Add an income or expense transaction here. Edit or delete individual rows in the table, or use the selection controls to delete multiple transactions.' },
-  { selector: '.subscription-page .page-heading .heading-actions', view: 'subscriptions', title: 'Track upcoming renewals', body: 'See subscription due dates on the monthly calendar and review the monthly cost estimate. Add subscriptions here, or manage, pause, and update recurring schedules.' },
+  { selector: '.subscription-page .page-heading .heading-actions', view: 'subscriptions', title: 'Track upcoming renewals', body: 'Review the next due dates, the monthly calendar, and the monthly cost estimate. Add subscriptions here, or manage, pause, and update recurring schedules.' },
   { selector: '.review-stats', view: 'review', title: 'Review the month', body: 'Compare recorded income and spending with your plan, see what remains after actuals, and identify categories that are over or under plan.' },
   { selector: '.report-choice-card', fallbackSelector: '.report-page .page-heading', view: 'reports', title: 'Explore reports', body: 'Run Budget Performance, Cash Flow & Leftover Income, Spending Trends, or Where Your Money Went. Reports can compare the months available in your budget series.' },
   { selector: '.settings-page-heading', view: 'settings', title: 'Make the app yours', body: 'Choose a theme, accent, text size, and layout density. Set currency and date formats, the calendar week start, and how carryover is calculated.' },
-  { selector: '.sidebar .backup-actions', view: 'dashboard', title: 'Keep a backup', body: 'Export a backup file or import one to restore or move budget data. Backups are manual, so keep a copy somewhere safe.' },
+  { selector: '.settings-data-actions', view: 'settings', title: 'Keep a backup', body: 'Budget data stays on this device. Export a backup file to save a copy where you choose, or import one to restore it.' },
 ];
 const payFrequencyInterval = (frequency: PayFrequency): number => ({ weekly: 7, biweekly: 14, monthly: 30 }[frequency] ?? 14);
 const expenseFrequencyInterval = (frequency: ExpenseFrequency): number => frequency === 'yearly' ? 365 : payFrequencyInterval(frequency);
@@ -340,6 +340,7 @@ let reportEndMonth: string | null = null;
 let transactionSearch = '';
 let transactionCategoryFilter = 'all';
 let transactionItemFilter = 'all';
+let transactionFiltersExpanded = false;
 const selectedTransactionIds = new Set<string>();
 let saveTimer: number | undefined;
 let saveQueue: Promise<void> = Promise.resolve();
@@ -602,9 +603,8 @@ function render(): void {
       <button class="sidebar-nav-item ${state.view === 'review' ? 'active' : ''}" data-action="navigate" data-page="review" ${state.view === 'review' ? 'aria-current="page"' : ''}><span aria-hidden="true">✓</span>Monthly Check-in</button>
       <button class="sidebar-nav-item ${state.view === 'reports' ? 'active' : ''}" data-action="navigate" data-page="reports" ${state.view === 'reports' ? 'aria-current="page"' : ''}><span aria-hidden="true">▤</span>Reports</button>
     </nav>
-    <div class="backup-actions"><button type="button" data-action="export-backup">Export backup</button><button type="button" data-action="import-backup">Import backup</button><input id="backup-file" type="file" accept="application/json,.json" hidden></div>
     <div class="sidebar-footer">${state.budgets.length ? '<button class="sidebar-nav-item tour-button" type="button" data-action="guided-tour" aria-label="Start app tour" data-tooltip="Replay the guided tour" title="Replay the guided tour"><span class="tour-cap" aria-hidden="true">🎓</span>App tour</button>' : ''}<button class="sidebar-nav-item sidebar-settings ${state.view === 'settings' ? 'active' : ''}" data-action="navigate" data-page="settings" ${state.view === 'settings' ? 'aria-current="page"' : ''}><span aria-hidden="true">⚙</span>Settings</button>
-      <div class="sidebar-bottom"><span class="saved-dot"></span><span>${IS_DEMO ? 'Stored in this browser' : 'Stored in app database'}</span><span id="save-status">All changes saved</span></div></div></aside>
+      <div class="sidebar-bottom"><span class="saved-dot"></span><span>${IS_DEMO ? 'Stored in this browser' : 'Saved on this device'}</span><span id="save-status">All changes saved</span></div></div></aside>
     <button class="mobile-nav-backdrop" type="button" data-action="close-sidebar" aria-label="Close navigation"></button>
     <main class="main-area"><header class="topbar"><button class="mobile-nav-toggle" type="button" data-action="toggle-sidebar" aria-label="Open navigation" aria-expanded="false"><span aria-hidden="true">☰</span></button><div class="breadcrumb"><strong>${labels[state.view]}</strong></div><div class="topbar-actions"></div></header>${page}</main></div>`;
   function settingsPage(): string {
@@ -613,7 +613,7 @@ function render(): void {
     const carryoverMethods: Array<[CarryoverMethod, string]> = [['actual', 'Actual leftover'], ['planned', 'Planned unallocated income']];
     const settingRow = (id: string, title: string, description: string, options: Array<[string, string]>, selectedValue: string): string =>
       `<label class="settings-option-row" for="${id}"><span><strong>${title}</strong><small>${description}</small></span><select id="${id}" aria-label="${title}">${options.map(([value, label]) => `<option value="${value}" ${value === selectedValue ? 'selected' : ''}>${label}</option>`).join('')}</select></label>`;
-    return `<section class="dashboard page-content settings-page"><div class="page-heading settings-page-heading"><div><p class="panel-kicker">PREFERENCES</p><h1>Settings</h1><p class="heading-subtitle">Personalize how Kestral Budget looks and formats your budget.</p></div></div><div class="settings-card"><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">◐</span><div><h2>Appearance</h2><p>Choose a look and layout that feels right for you.</p></div></div>${settingRow('theme-select', 'Color theme', 'Choose a theme or follow your device setting.', themes, state.preferences.theme ?? 'system')}${settingRow('accent-color-select', 'Accent color', 'Personalize highlights and interactive accents.', ACCENT_COLORS, state.preferences.accentColor ?? 'forest')}${settingRow('text-size-select', 'Text size', 'Adjust text throughout the app.', TEXT_SIZES, state.preferences.textSize ?? 'medium')}${settingRow('density-select', 'Layout density', 'Choose more breathing room or a compact view.', DENSITIES, state.preferences.density ?? 'comfortable')}</section><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">¤</span><div><h2>Regional formats</h2><p>Choose the currency and date style used across your budget.</p></div></div>${settingRow('currency-select', 'Currency', 'Display amounts using this currency; values are not converted.', CURRENCIES, state.preferences.currency ?? 'USD')}${settingRow('date-format-select', 'Date format', 'Use a familiar regional format or the ISO 8601 standard.', DATE_FORMATS, state.preferences.dateFormat ?? 'mdy')}</section><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">▦</span><div><h2>Calendar</h2><p>Set the week layout for your subscription calendar.</p></div></div>${settingRow('week-start-select', 'First day of the week', 'Choose Sunday or Monday as the first weekday.', weekStarts, state.preferences.weekStartsOn ?? 'sunday')}</section><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">↻</span><div><h2>Month rollover</h2><p>Choose how unallocated money carries into a new month.</p></div></div>${settingRow('carryover-method-select', 'New-month carryover', "Pick the basis for calculating the next month's opening carryover.", carryoverMethods, state.preferences.carryoverMethod ?? 'actual')}<div class="settings-note"><span aria-hidden="true">i</span><p>Changes apply to months created from now on. Existing month carryovers are preserved.</p></div></section>${state.budgets.length ? '<section class="settings-section settings-danger-zone"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">!</span><div><h2>Delete budget</h2><p>Permanently remove this budget, including all months, transactions, categories, and schedules.</p></div></div><div class="settings-danger-actions"><p>Your appearance and regional preferences will be kept. You will need to set up a new budget before returning to the other pages.</p><button class="button button-danger" type="button" data-action="delete-budget">Delete budget</button></div></section>' : ''}</div></section>`;
+    return `<section class="dashboard page-content settings-page"><div class="page-heading settings-page-heading"><div><p class="panel-kicker">PREFERENCES</p><h1>Settings</h1><p class="heading-subtitle">Personalize how Kestral Budget looks and formats your budget.</p></div></div><div class="settings-card"><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">◐</span><div><h2>Appearance</h2><p>Choose a look and layout that feels right for you.</p></div></div>${settingRow('theme-select', 'Color theme', 'Choose a theme or follow your device setting.', themes, state.preferences.theme ?? 'system')}${settingRow('accent-color-select', 'Accent color', 'Personalize highlights and interactive accents.', ACCENT_COLORS, state.preferences.accentColor ?? 'forest')}${settingRow('text-size-select', 'Text size', 'Adjust text throughout the app.', TEXT_SIZES, state.preferences.textSize ?? 'medium')}${settingRow('density-select', 'Layout density', 'Choose more breathing room or a compact view.', DENSITIES, state.preferences.density ?? 'comfortable')}</section><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">¤</span><div><h2>Regional formats</h2><p>Choose the currency and date style used across your budget.</p></div></div>${settingRow('currency-select', 'Currency', 'Display amounts using this currency; values are not converted.', CURRENCIES, state.preferences.currency ?? 'USD')}${settingRow('date-format-select', 'Date format', 'Use a familiar regional format or the ISO 8601 standard.', DATE_FORMATS, state.preferences.dateFormat ?? 'mdy')}</section><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">▦</span><div><h2>Calendar</h2><p>Set the week layout for your subscription calendar.</p></div></div>${settingRow('week-start-select', 'First day of the week', 'Choose Sunday or Monday as the first weekday.', weekStarts, state.preferences.weekStartsOn ?? 'sunday')}</section><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">↻</span><div><h2>Month rollover</h2><p>Choose how unallocated money carries into a new month.</p></div></div>${settingRow('carryover-method-select', 'New-month carryover', "Pick the basis for calculating the next month's opening carryover.", carryoverMethods, state.preferences.carryoverMethod ?? 'actual')}<div class="settings-note"><span aria-hidden="true">i</span><p>Changes apply to months created from now on. Existing month carryovers are preserved.</p></div></section><section class="settings-section"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">⇅</span><div><h2>Data and backups</h2><p>Budget data is saved locally on this device. Backups are created only when you export them.</p></div></div><div class="settings-data-actions"><button class="button button-secondary" type="button" data-action="export-backup">Export backup</button><button class="button button-secondary" type="button" data-action="import-backup">Import backup</button><input id="backup-file" type="file" accept="application/json,.json" hidden></div></section>${state.budgets.length ? '<section class="settings-section settings-danger-zone"><div class="settings-section-heading"><span class="settings-section-icon" aria-hidden="true">!</span><div><h2>Delete budget</h2><p>Permanently remove this budget, including all months, transactions, categories, and schedules.</p></div></div><div class="settings-danger-actions"><p>Your appearance and regional preferences will be kept. You will need to set up a new budget before returning to the other pages.</p><button class="button button-danger" type="button" data-action="delete-budget">Delete budget</button></div></section>' : ''}</div></section>`;
   }
   if (budget?.expenseSchedules.length && state.view === 'dashboard') {
     const categoryHeading = root.querySelector<HTMLElement>('.categories-section .section-title-row > div');
@@ -766,7 +766,7 @@ async function importBackup(file: File): Promise<void> {
 }
 function monthTabs(budget: Budget, budgets: Budget[], actions?: string): string {
   const tabs = budgets.map((item) => `<button class="month-tab ${item.id === budget.id ? 'selected' : ''}" data-action="select-month" data-id="${esc(item.id)}" role="tab" aria-selected="${item.id === budget.id}">${esc(monthText(item.month))}</button>`).join('');
-  const addMonth = '<button class="month-add" data-action="new-month" aria-label="Create a new month" title="Create a new month">+</button>';
+  const addMonth = '<button class="month-add" data-action="new-month" aria-label="Create a new month" title="Create a new month"><span aria-hidden="true">+</span><span class="month-add-label">New month</span></button>';
   return actions === undefined
     ? `<div class="budget-tabs" role="tablist" aria-label="Choose a month">${tabs}${addMonth}</div>`
     : `<div class="month-toolbar"><div class="budget-tabs" role="tablist" aria-label="Choose a month">${tabs}</div>${addMonth}${actions}</div>`;
@@ -802,15 +802,15 @@ function dashboard(b: Budget, budgets: Budget[]): string {
       }]
       : [];
   });
-  const top = [...topEntries, ...topTransactions]
+  const topRanked = [...topEntries, ...topTransactions]
     .filter((item) => item.actual > 0)
-    .sort((left, right) => right.actual - left.actual)
-    .slice(0, 20);
+    .sort((left, right) => right.actual - left.actual);
+  const top = topRanked.slice(0, 3);
   const summaryDisclosure = (label: string, planned: number, actual: number, rows: string, isIncome = false): string => {
     const diffClass = isIncome
       ? actual > planned ? 'positive' : actual < planned ? 'negative' : ''
       : actual > planned ? 'negative' : actual < planned ? 'positive' : '';
-    return `<details class="summary-disclosure" open><summary><strong>${label}</strong><span><small>Planned</small>${fmt(planned)}</span><span><small>Actual</small>${fmt(actual)}</span><span class="${diffClass}"><small>Diff</small>${signed(actual - planned)}</span></summary><div class="table-scroll"><table><colgroup><col class="summary-label-column"><col class="summary-value-column" span="3"></colgroup><thead><tr><th class="sr-only">${label === 'Income' ? 'INCOME SOURCE' : 'CATEGORY'}</th><th class="sr-only">PLANNED</th><th class="sr-only">ACTUAL</th><th class="sr-only">DIFF</th></tr></thead><tbody>${rows || `<tr><td colspan="4">No ${label.toLowerCase()} items yet.</td></tr>`}</tbody></table></div></details>`;
+    return `<details class="summary-disclosure"><summary><strong>${label}</strong><span><small>Planned</small>${fmt(planned)}</span><span><small>Actual</small>${fmt(actual)}</span><span class="${diffClass}"><small>Diff</small>${signed(actual - planned)}</span></summary><div class="table-scroll"><table><colgroup><col class="summary-label-column"><col class="summary-value-column" span="3"></colgroup><thead><tr><th class="sr-only">${label === 'Income' ? 'INCOME SOURCE' : 'CATEGORY'}</th><th class="sr-only">PLANNED</th><th class="sr-only">ACTUAL</th><th class="sr-only">DIFF</th></tr></thead><tbody>${rows || `<tr><td colspan="4">No ${label.toLowerCase()} items yet.</td></tr>`}</tbody></table></div></details>`;
   };
   const incomeTotalActual = summary.income.actual;
   const categoryActual = summary.out.actual;
@@ -847,10 +847,26 @@ function dashboard(b: Budget, budgets: Budget[]): string {
         ${summaryDisclosure('Income', summary.income.planned, incomeTotalActual, incomeRows, true)}
         ${summaryDisclosure('Categories', summary.out.planned, categoryActual, categoryRows)}
       </section>
-      <section class="panel top-spending"><div class="panel-heading"><div><p class="panel-kicker">WHERE IT WENT</p><h2>Top spending</h2></div><span class="count-badge">${top.length} / 20</span></div>${top.length ? `<ol class="top-list">${top.map((item, index) => `<li><span class="rank">${String(index + 1).padStart(2, '0')}</span><span class="top-copy"><strong>${esc(item.name)}</strong><small>${esc(item.category)} · ${esc(item.budgetItem)}</small></span><span class="top-amount">${fmt(item.actual)}</span></li>`).join('')}</ol>` : '<div class="quiet-empty">Actual spending will appear here as you record it.</div>'}</section>
+      <section class="panel top-spending"><div class="panel-heading"><div><p class="panel-kicker">WHERE IT WENT</p><h2>Top spending</h2></div><div class="panel-heading-actions"><span class="count-badge">${top.length} of ${topRanked.length}</span><button class="text-action" type="button" data-action="navigate" data-page="transactions">View transactions</button></div></div>${top.length ? `<ol class="top-list">${top.map((item, index) => `<li><span class="rank">${String(index + 1).padStart(2, '0')}</span><span class="top-copy"><strong>${esc(item.name)}</strong><small>${esc(item.category)} · ${esc(item.budgetItem)}</small></span><span class="top-amount">${fmt(item.actual)}</span></li>`).join('')}</ol>` : '<div class="quiet-empty">Actual spending will appear here as you record it.</div>'}</section>
     </section>
     <section class="categories-section" ${isTransactionsPage ? 'hidden' : ''}><div class="section-title-row"><div><p class="panel-kicker">YOUR PLAN</p><h2>Budget categories</h2></div><button class="button button-secondary" data-action="add-category">＋ Add category</button></div><div class="category-grid">${groups.map((groupItem) => categoryCard(groupItem, b)).join('')}</div></section>
-    <section class="transactions-panel panel" ${isTransactionsPage ? '' : 'hidden'}><div class="panel-heading"><div><p class="panel-kicker">RECORDED ACTIVITY</p><h2>Transactions</h2></div><div class="panel-heading-actions"><span class="count-badge">${b.transactions.length}</span><button class="button button-primary" data-action="new-transaction"><span>+</span> Add transaction</button></div></div><div class="transaction-tools"><label class="transaction-filter">Search<input id="transaction-search" type="search" value="${esc(transactionSearch)}" placeholder="Description, budget item, category, or date"></label><label class="transaction-filter">Budget item<select id="transaction-item-filter"><option value="all">All budget items</option>${b.categories.flatMap((category) => category.entries.map((entry) => `<option value="${esc(entry.id)}" ${transactionItemFilter === entry.id ? 'selected' : ''}>${esc(category.name)} · ${esc(entry.name)}</option>`)).join('')}${hasCategoryOnlyTransactions ? `<option value="category-only" ${transactionItemFilter === 'category-only' ? 'selected' : ''}>No budget item — unplanned</option>` : ''}</select></label><label class="transaction-filter">Category<select id="transaction-category-filter"><option value="all">All categories</option>${b.categories.map((category) => `<option value="${esc(category.id)}" ${transactionCategoryFilter === category.id ? 'selected' : ''}>${esc(category.name)}</option>`).join('')}</select></label><label class="transaction-filter">Sort by<select id="transaction-sort-field">${(['date', 'description', 'type', 'category', 'amount'] as TransactionSortField[]).map((field) => `<option value="${field}" ${transactionSortConfig().field === field ? 'selected' : ''}>${transactionSortLabel(field)}</option>`).join('')}</select></label><div class="transaction-filter transaction-direction"><span>Direction</span><button class="button button-secondary" type="button" data-action="toggle-transaction-sort-direction">${transactionSortConfig().direction === 'asc' ? 'Ascending' : 'Descending'}</button></div><div class="transaction-bulk"><span id="transaction-selection-count" aria-live="polite">0 selected</span><button class="button button-secondary" type="button" data-action="select-visible">Select visible</button><button class="button button-secondary" type="button" data-action="clear-selection" disabled>Clear selection</button><button class="button button-danger" type="button" data-action="delete-selected" disabled>Delete selected</button></div></div>${b.transactions.length ? `<div class="table-scroll"><table><thead><tr><th><span class="visually-hidden">Select</span></th><th>DATE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>BUDGET ITEM</th><th>AMOUNT</th><th></th></tr></thead><tbody>${transactionRows}</tbody></table></div><p id="transaction-no-results" class="transaction-no-results" hidden>No transactions match these filters.</p>` : '<div class="quiet-empty">No transactions recorded this month.</div>'}</section></section>`;
+    <section class="transactions-panel panel" ${isTransactionsPage ? '' : 'hidden'}>
+      <div class="panel-heading"><div><p class="panel-kicker">RECORDED ACTIVITY</p><h2>Transactions</h2></div><div class="panel-heading-actions"><span class="count-badge">${b.transactions.length}</span><button class="button button-primary" data-action="new-transaction"><span>+</span> Add transaction</button></div></div>
+      <div class="transaction-tools">
+        <label class="transaction-filter transaction-search">Search<input id="transaction-search" type="search" value="${esc(transactionSearch)}" placeholder="Description, budget item, category, or date"></label>
+        <details class="transaction-advanced-filters" ${transactionFiltersExpanded ? 'open' : ''}>
+          <summary>Filters and sorting</summary>
+          <div class="transaction-filter-controls">
+            <label class="transaction-filter">Budget item<select id="transaction-item-filter"><option value="all">All budget items</option>${b.categories.flatMap((category) => category.entries.map((entry) => `<option value="${esc(entry.id)}" ${transactionItemFilter === entry.id ? 'selected' : ''}>${esc(category.name)} · ${esc(entry.name)}</option>`)).join('')}${hasCategoryOnlyTransactions ? `<option value="category-only" ${transactionItemFilter === 'category-only' ? 'selected' : ''}>No budget item — unplanned</option>` : ''}</select></label>
+            <label class="transaction-filter">Category<select id="transaction-category-filter"><option value="all">All categories</option>${b.categories.map((category) => `<option value="${esc(category.id)}" ${transactionCategoryFilter === category.id ? 'selected' : ''}>${esc(category.name)}</option>`).join('')}</select></label>
+            <label class="transaction-filter">Sort by<select id="transaction-sort-field">${(['date', 'description', 'type', 'category', 'amount'] as TransactionSortField[]).map((field) => `<option value="${field}" ${transactionSortConfig().field === field ? 'selected' : ''}>${transactionSortLabel(field)}</option>`).join('')}</select></label>
+            <div class="transaction-filter transaction-direction"><span>Direction</span><button class="button button-secondary" type="button" data-action="toggle-transaction-sort-direction">${transactionSortConfig().direction === 'asc' ? 'Ascending' : 'Descending'}</button></div>
+          </div>
+        </details>
+        <div class="transaction-bulk"><span id="transaction-selection-count" aria-live="polite" hidden>0 selected</span><button class="button button-secondary" type="button" data-action="select-visible">Select visible</button><button class="button button-secondary" type="button" data-action="clear-selection" disabled hidden>Clear selection</button><button class="button button-danger" type="button" data-action="delete-selected" disabled hidden>Delete selected</button></div>
+      </div>
+      ${b.transactions.length ? `<div class="table-scroll"><table><thead><tr><th><span class="visually-hidden">Select</span></th><th>DATE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>BUDGET ITEM</th><th>AMOUNT</th><th></th></tr></thead><tbody>${transactionRows}</tbody></table></div><p id="transaction-no-results" class="transaction-no-results" hidden>No transactions match these filters.</p>` : '<div class="quiet-empty">No transactions recorded this month.</div>'}
+    </section></section>`;
 }
 
 function monthlyReviewPage(budget: Budget): string {
@@ -909,8 +925,8 @@ function monthlyReviewPage(budget: Budget): string {
     .sort((left, right) => right.total - left.total);
   const unplannedCount = unplannedGroups.reduce((count, group) => count + group.transactions.length, 0);
   const unplannedActivity = unplannedCount
-    ? `<section class="review-unplanned"><div class="review-unplanned-heading"><div><h3>Unplanned activity</h3><p>These transactions have no budget item but are included in their category actuals.</p></div><span class="count-badge">${unplannedCount}</span></div><div class="review-unplanned-groups">${unplannedGroups.map((group) => `<section class="review-unplanned-group"><h4><span>${esc(group.category)}</span><strong>${fmt(group.total)}</strong></h4><ul>${group.transactions.map((transaction) => `<li><span><strong>${esc(transaction.description)}</strong><small>${esc(displayDate(transaction.date))}</small></span><strong>${fmt(transaction.amount)}</strong></li>`).join('')}</ul></section>`).join('')}</div></section>`
-    : '<section class="review-unplanned review-unplanned-empty"><div class="review-unplanned-heading"><div><h3>Unplanned activity</h3><p>No spending transactions are missing a budget item.</p></div><span class="count-badge">0</span></div></section>';
+    ? `<section class="review-unplanned"><div class="review-unplanned-heading"><div><h3>Unplanned activity</h3><p>These transactions have no budget item but are included in their category actuals.</p></div><span class="review-section-meta">${unplannedCount} ${unplannedCount === 1 ? 'transaction' : 'transactions'}</span></div><div class="review-unplanned-groups">${unplannedGroups.map((group) => `<section class="review-unplanned-group"><h4><span>${esc(group.category)}</span><strong>${fmt(group.total)}</strong></h4><ul>${group.transactions.map((transaction) => `<li><span><strong>${esc(transaction.description)}</strong><small>${esc(displayDate(transaction.date))}</small></span><strong>${fmt(transaction.amount)}</strong></li>`).join('')}</ul></section>`).join('')}</div></section>`
+    : '<section class="review-unplanned review-unplanned-empty"><div class="review-unplanned-heading"><div><h3>Unplanned activity</h3><p>No spending transactions are missing a budget item.</p></div><span class="review-section-meta">None</span></div></section>';
   const hasActivity = summary.income.actual !== 0 || summary.out.actual !== 0;
   const highlights: Array<{ title: string; detail: string; kind: string }> = [];
   const largestOverPlan = spendingCategories.find((item) => item.difference > 0.01);
@@ -1039,25 +1055,25 @@ function monthlyReviewPage(budget: Budget): string {
       <small class="review-caveat">Calendar time is context, not a forecast; bills and one-time costs can make spending uneven through the month.</small>
     </section>
     <section class="panel report-panel review-panel">
-      <div class="panel-heading"><div><p class="panel-kicker">QUICK READ</p><h2>What stands out</h2></div><span class="count-badge">${highlights.length}</span></div>
+      <div class="panel-heading"><div><p class="panel-kicker">QUICK READ</p><h2>What stands out</h2></div></div>
       <div class="review-highlights">${highlights.map((item) => `<article class="review-highlight ${item.kind}"><strong>${esc(item.title)}</strong><p>${esc(item.detail)}</p></article>`).join('')}</div>
       ${unplannedActivity}
     </section>
     <section class="panel report-panel review-panel">
-      <div class="panel-heading"><div><p class="panel-kicker">FULL-MONTH PLAN</p><h2>Spending by category</h2></div><span class="count-badge">${spendingCategories.length}</span></div>
+      <div class="panel-heading"><div><p class="panel-kicker">FULL-MONTH PLAN</p><h2>Spending by category</h2></div><span class="review-section-meta">${spendingCategories.length} ${spendingCategories.length === 1 ? 'category' : 'categories'}</span></div>
       <p class="report-description">All planned non-income categories are shown, including categories with no activity yet. Spending includes bills, expenses, savings, and debt payments.</p>
       <div class="report-table-scroll"><table class="report-table review-table"><thead><tr><th scope="col">Category</th><th scope="col">Planned</th><th scope="col">Actual</th><th scope="col">Remaining / over</th><th scope="col">Used</th></tr></thead><tbody>${categoryRows || '<tr><td colspan="5" class="review-empty">No spending categories have planned or recorded amounts yet.</td></tr>'}</tbody></table></div>
     </section>
-    <section class="panel report-panel review-panel">
-      <div class="panel-heading"><div><p class="panel-kicker">INCOME PLAN</p><h2>Income sources</h2></div><span class="count-badge">${incomeSources.length}</span></div>
+    <details class="panel report-panel review-panel review-collapsible">
+      <summary class="panel-heading"><div><p class="panel-kicker">INCOME PLAN</p><h2>Income sources</h2></div><span class="review-section-meta">${incomeSources.length} ${incomeSources.length === 1 ? 'source' : 'sources'}</span></summary>
       <p class="report-description">Income actuals include entered amounts and transactions linked to each source.</p>
       <div class="report-table-scroll"><table class="report-table review-table"><thead><tr><th scope="col">Source</th><th scope="col">Planned</th><th scope="col">Actual</th><th scope="col">Difference</th></tr></thead><tbody>${incomeRows || '<tr><td colspan="4" class="review-empty">No income sources have planned or recorded amounts yet.</td></tr>'}</tbody></table></div>
-    </section>
-    <section class="panel report-panel review-panel">
-      <div class="panel-heading"><div><p class="panel-kicker">RECORDED ACTIVITY</p><h2>Largest spending transactions</h2></div><span class="count-badge">${largestTransactions.length} of ${spendingTransactions.length}</span></div>
+    </details>
+    <details class="panel report-panel review-panel review-collapsible">
+      <summary class="panel-heading"><div><p class="panel-kicker">RECORDED ACTIVITY</p><h2>Largest spending transactions</h2></div><span class="review-section-meta">${largestTransactions.length} of ${spendingTransactions.length}</span></summary>
       <p class="report-description">The largest transactions recorded so far, by amount. Manual actual amounts are included in the summaries above.</p>
       <div class="report-table-scroll"><table class="report-table review-table"><thead><tr><th scope="col">Date</th><th scope="col">Transaction</th><th scope="col">Amount</th></tr></thead><tbody>${transactionRows || '<tr><td colspan="3" class="review-empty">No spending transactions recorded yet.</td></tr>'}</tbody></table></div>
-    </section>
+    </details>
   </section>`;
 }
 
@@ -1317,6 +1333,7 @@ function subscriptionTrackingPage(budget: Budget, budgets: Budget[]): string {
         name: schedule.name,
         category: category.name.toLocaleLowerCase() === 'subscriptions' ? '' : category.name,
         amount: monthlyEquivalent(schedule),
+        sortDate: schedule.paused ? '' : occurrence?.date ?? '',
         details: schedule.paused ? 'Paused' : `${expenseFrequencyLabel(schedule.frequency)}${occurrence ? ` · ${displayDate(occurrence.date)}` : ''}`,
         actions: `<button class="subscription-action" data-action="edit-expense-schedule" data-schedule="${esc(schedule.id)}" type="button">Edit</button><span class="subscription-action subscription-action-placeholder" aria-hidden="true">Schedule</span>`,
       };
@@ -1327,18 +1344,28 @@ function subscriptionTrackingPage(budget: Budget, budgets: Budget[]): string {
         name: entry.name,
         category: category.name.toLocaleLowerCase() === 'subscriptions' ? '' : category.name,
         amount: entry.planned,
+        sortDate: date ?? '',
         details: date ? `Due ${displayDate(date)}` : 'No due date',
         actions: `<button class="subscription-action" data-action="edit-entry" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Edit</button><button class="subscription-action" data-action="schedule-subscription" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button">Schedule</button>`,
       };
     }),
-  ].sort((left, right) => left.name.localeCompare(right.name));
-  const calendarNotice = subscriptionItems.length && !events.length
-    ? '<div class="subscription-empty"><strong>No due dates this month</strong><p>Add a reminder date or recurring schedule to place subscriptions on the calendar.</p></div>'
-    : '';
+  ].sort((left, right) => (left.sortDate || '9999-12-31').localeCompare(right.sortDate || '9999-12-31') || left.name.localeCompare(right.name));
+  const today = new Date();
+  const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const currentMonth = todayDate.slice(0, 7);
+  const monthIsCurrent = budget.month === currentMonth;
+  const agendaEvents = events.filter((event) => !monthIsCurrent || event.date >= todayDate).slice(0, 3);
+  const agendaHeading = budget.month >= currentMonth ? 'Coming up this month' : 'Due dates this month';
+  const agendaEmptyText = budget.month >= currentMonth
+    ? 'No upcoming due dates this month. Add a date or recurring schedule to see it here.'
+    : 'No due dates were recorded this month.';
+  const agendaPanel = `<section class="subscription-agenda" aria-label="Next subscription due dates"><div class="subscription-agenda-heading"><div><p class="panel-kicker">UP NEXT</p><h2>${agendaHeading}</h2></div><span class="count-badge">${agendaEvents.length} shown</span></div>${agendaEvents.length
+    ? `<ol class="subscription-agenda-list">${agendaEvents.map((item) => `<li><button class="subscription-agenda-item" ${item.entryId ? `data-action="edit-entry" data-category="${esc(item.categoryId)}" data-entry="${esc(item.entryId)}"` : `data-action="edit-expense-schedule" data-schedule="${esc(item.scheduleId ?? '')}"`}><span><strong>${esc(item.name)}</strong><small>${esc(displayDate(item.date))}</small></span><strong>${fmt(item.amount)}</strong></button></li>`).join('')}</ol>`
+    : `<p class="subscription-empty">${agendaEmptyText}</p>`}</section>`;
   const listPanel = `<section class="subscription-list-panel" aria-label="All subscriptions"><div class="subscription-list-heading"><h2>Subscriptions</h2><span>${subscriptionItems.length}</span></div>${subscriptionItems.length
     ? `<div class="subscription-table-head" aria-hidden="true"><span>Subscription</span><span>Renewal</span><span>Monthly</span><span>Actions</span></div><div class="subscription-list">${subscriptionItems.map((item) => `<div class="subscription-row"><div class="subscription-copy"><strong>${esc(item.name)}</strong>${item.category ? `<small>${esc(item.category)}</small>` : ''}</div><span class="subscription-renewal">${esc(item.details)}</span><div class="subscription-cost"><strong>${fmt(item.amount)}</strong></div><div class="subscription-row-actions">${item.actions}</div></div>`).join('')}</div>`
     : '<div class="subscription-empty"><strong>No subscriptions yet</strong><p>Add a subscription with a due date or recurring schedule to see it here.</p></div>'}</section>`;
-  return `<section class="dashboard page-content subscription-page">${monthTabs(budget, budgets)}<div class="page-heading"><div><p class="panel-kicker">RENEWALS & DUE DATES</p><h1>Subscription Tracking</h1><p class="heading-subtitle">${events.length} due ${events.length === 1 ? 'date' : 'dates'} · ${fmt(monthlyTotal)} monthly estimate</p></div><div class="heading-actions">${budget.expenseSchedules.length ? '<button class="button button-secondary" data-action="manage-expense-schedules">Manage schedules</button>' : ''}<button class="button button-primary" data-action="add-subscription">+ Add subscription</button></div></div>${calendarNotice}<section class="subscription-calendar" aria-label="${esc(monthText(budget.month))} subscription calendar"><div class="calendar-weekdays">${weekdays.map((day) => `<span>${day}</span>`).join('')}</div><div class="calendar-grid">${cells.join('')}</div></section>${listPanel}</section>`;
+  return `<section class="dashboard page-content subscription-page">${monthTabs(budget, budgets)}<div class="page-heading"><div><p class="panel-kicker">RENEWALS & DUE DATES</p><h1>Subscription Tracking</h1><p class="heading-subtitle">${events.length} due ${events.length === 1 ? 'date' : 'dates'} · ${fmt(monthlyTotal)} monthly estimate</p></div><div class="heading-actions">${budget.expenseSchedules.length ? '<button class="button button-secondary" data-action="manage-expense-schedules">Manage schedules</button>' : ''}<button class="button button-primary" data-action="add-subscription">+ Add subscription</button></div></div><div class="subscription-overview">${agendaPanel}<section class="subscription-calendar" aria-label="${esc(monthText(budget.month))} subscription calendar"><div class="calendar-weekdays">${weekdays.map((day) => `<span>${day}</span>`).join('')}</div><div class="calendar-grid">${cells.join('')}</div></section></div>${listPanel}</section>`;
 }
 
 function beginSubscriptionSetup(): void {
@@ -1377,8 +1404,11 @@ function updateTransactionSelectionUI(): void {
   const selectVisibleButton = root.querySelector<HTMLButtonElement>('[data-action="select-visible"]');
   const visibleCount = root.querySelectorAll('[data-transaction-row]:not([hidden])').length;
   if (count) count.textContent = `${selectedCount} selected`;
+  if (count) count.hidden = selectedCount === 0;
   if (deleteButton) deleteButton.disabled = selectedCount === 0;
+  if (deleteButton) deleteButton.hidden = selectedCount === 0;
   if (clearButton) clearButton.disabled = selectedCount === 0;
+  if (clearButton) clearButton.hidden = selectedCount === 0;
   if (selectVisibleButton) selectVisibleButton.disabled = visibleCount === 0;
 }
 function categoryCard(g: BudgetGroup, budget: Budget): string {
@@ -2143,6 +2173,12 @@ document.addEventListener('keydown', (event: KeyboardEvent) => {
     finishGuidedTour();
   }
 });
+document.addEventListener('toggle', (event: Event) => {
+  const target = event.target;
+  if (target instanceof HTMLDetailsElement && target.classList.contains('transaction-advanced-filters')) {
+    transactionFiltersExpanded = target.open;
+  }
+}, true);
 document.addEventListener('input', (event: Event) => {
   if (!(event.target instanceof HTMLInputElement) || event.target.id !== 'transaction-search') return;
   transactionSearch = event.target.value;
