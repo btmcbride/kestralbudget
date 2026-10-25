@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildExpenseEntriesForMonth, buildIncomeEntriesForMonth, isWithinMonth } from '../src/paycheck-scheduler.js';
+import { buildExpenseEntriesForMonth, buildIncomeEntriesForMonth, getScheduledIncomeTotalForMonth, isWithinMonth } from '../src/paycheck-scheduler.js';
 
 test('buildIncomeEntriesForMonth includes every scheduled payday in the month for biweekly pay', () => {
   const entries = buildIncomeEntriesForMonth({
@@ -14,6 +14,29 @@ test('buildIncomeEntriesForMonth includes every scheduled payday in the month fo
 
   assert.deepEqual(entries.map((entry) => entry.date), ['2026-01-02', '2026-01-16', '2026-01-30']);
   assert.deepEqual(entries.map((entry) => entry.amount), [2500, 2500, 2500]);
+});
+
+test('getScheduledIncomeTotalForMonth totals each paycheck into one monthly plan amount', () => {
+  const schedule = {
+    id: 'cgi-federal',
+    name: 'CGI Federal Pay',
+    amount: 2500,
+    frequency: 'biweekly',
+    nextPayday: '2026-10-02',
+  };
+
+  assert.equal(getScheduledIncomeTotalForMonth(schedule, '2026-10'), 7500);
+  assert.equal(getScheduledIncomeTotalForMonth(schedule, '2026-11'), 5000);
+});
+
+test('getScheduledIncomeTotalForMonth is zero before the first scheduled paycheck', () => {
+  assert.equal(getScheduledIncomeTotalForMonth({
+    id: 'future-pay',
+    name: 'Future pay',
+    amount: 2500,
+    frequency: 'biweekly',
+    nextPayday: '2026-11-06',
+  }, '2026-10'), 0);
 });
 
 test('buildIncomeEntriesForMonth respects a weekly pay schedule', () => {

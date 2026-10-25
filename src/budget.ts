@@ -7,7 +7,7 @@ import './transactions.css';
 import './recurring-expenses.css';
 import './guided-tour.css';
 import './budget-feedback.css';
-import { buildExpenseEntriesForMonth, buildIncomeEntriesForMonth, type ExpenseFrequency } from './paycheck-scheduler.js';
+import { buildExpenseEntriesForMonth, getScheduledIncomeTotalForMonth, type ExpenseFrequency } from './paycheck-scheduler.js';
 import { hasMatchingUnscheduledOccurrence } from './subscription-events.js';
 import { createBackup, parseBackup } from './backup.js';
 import { IS_DEMO, fetchState, sendState, installDemoBanner } from './state-api.js';
@@ -2297,13 +2297,16 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
     const incomeCategory = clonedCategories.find((category) => category.type === 'income');
     if (incomeCategory) {
       incomeCategory.entries = incomeCategory.entries.filter((entry) => !entry.scheduleId);
-      const scheduledEntries = (template.incomeSchedules || []).flatMap((schedule) => buildIncomeEntriesForMonth(schedule, month).map((entry: { name: string; amount: number }) => ({
-        id: uid(),
-        name: entry.name,
-        planned: entry.amount,
-        actual: 0,
-        scheduleId: schedule.id,
-      })));
+      const scheduledEntries = (template.incomeSchedules || []).flatMap((schedule) => {
+        const planned = getScheduledIncomeTotalForMonth(schedule, month);
+        return planned > 0 ? [{
+          id: uid(),
+          name: schedule.name,
+          planned,
+          actual: 0,
+          scheduleId: schedule.id,
+        }] : [];
+      });
       incomeCategory.entries.push(...scheduledEntries);
     }
     const carryoverMethod = state.preferences.carryoverMethod ?? 'actual';
@@ -2394,16 +2397,8 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
       const schedule: RecurringIncomeSchedule = { id: uid(), name, amount: planned, frequency, intervalDays: payFrequencyInterval(frequency), nextPayday };
       b.incomeSchedules.push(schedule);
 
-  // Use the existing scheduler to find all paydays in the current month
-      const monthEntries = buildIncomeEntriesForMonth(schedule, b.month);
-  
-  // Sum them up to get the true monthly planned amount
-      const calculatedPlanned = monthEntries.reduce((sum, item) => sum + item.amount, 0);
-
-  // Fallback to the raw single amount if the scheduler returns 0 for any reason
-      const finalPlanned = calculatedPlanned > 0 ? calculatedPlanned : planned;
-
-      c.entries.push({ id: uid(), name, planned: finalPlanned, actual: 0, scheduleId: schedule.id });
+  const calculatedPlanned = getScheduledIncomeTotalForMonth(schedule, b.month);
+  if (calculatedPlanned > 0) c.entries.push({ id: uid(), name, planned: calculatedPlanned, actual: 0, scheduleId: schedule.id });
     } else {
       c.entries.push({ id: uid(), name, planned, actual: 0, ...(supportsEntryDueDate(g.id) && dueDate ? { dueDate } : {}) });
     }

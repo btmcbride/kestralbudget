@@ -61,6 +61,11 @@ export function buildIncomeEntriesForMonth(schedule, monthString) {
   return entries;
 }
 
+export function getScheduledIncomeTotalForMonth(schedule, monthString) {
+  return buildIncomeEntriesForMonth(schedule, monthString)
+    .reduce((total, entry) => total + entry.amount, 0);
+}
+
 export function buildExpenseEntriesForMonth(schedule, monthString) {
   const firstDueDate = String(schedule?.nextDueDate ?? '');
   if (!firstDueDate || schedule?.paused) return [];
