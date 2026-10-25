@@ -13,7 +13,6 @@
   .budget-tabs{overflow-x:auto;scrollbar-width:none}
   .metric-grid{grid-template-columns:1fr 1fr}
   .metric-card:nth-child(odd){border-right:1px solid var(--line)}
-  .metric-card:nth-child(3){grid-column:1/-1;border-right:0}
 
   .entry-row,.entry-columns{grid-template-columns:minmax(0,1fr) minmax(64px,auto) minmax(58px,auto) minmax(58px,auto);gap:8px}
   .entry-name{min-width:0;overflow-wrap:anywhere}

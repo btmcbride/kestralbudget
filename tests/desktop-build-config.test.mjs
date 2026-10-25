@@ -29,6 +29,7 @@ test('dev builds use distinct app identities, artifacts, and output paths', () =
   assert.equal(windowsConfig.directories.output, 'release/windows-dev');
   assert.equal(windowsConfig.win.artifactName, 'KestralBudget-Dev-Setup-${version}.${ext}');
   assert.equal(windowsConfig.nsis.shortcutName, 'Kestral Budget Dev');
+  assert.equal(macConfig.nsis.include, undefined);
   assert.equal(macConfig.directories.output, 'release/mac-dev');
   assert.equal(macConfig.artifactName, 'KestralBudget-Dev-${version}-${arch}.${ext}');
   assert.equal(macConfig.extraMetadata.kestralBuildChannel, 'dev');

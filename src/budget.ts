@@ -93,6 +93,7 @@ interface Budget {
   seriesId: string;
   name: string;
   month: string;
+  isClosed: boolean;
   carryover: number;
   carryoverMethod?: CarryoverMethod;
   selectedTypes: BudgetGroupId[];
@@ -117,7 +118,7 @@ type DensityPreference = 'comfortable' | 'compact';
 type TextSizePreference = 'small' | 'medium' | 'large' | 'larger';
 type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'CAD' | 'AUD' | 'NZD' | 'JPY' | 'CNY' | 'INR' | 'CHF' | 'MXN' | 'BRL';
 type DateFormat = 'mdy' | 'dmy' | 'iso';
-type ReportId = 'performance' | 'cashflow' | 'trends';
+type ReportId = 'performance' | 'cashflow' | 'trends' | 'breakdown';
 interface AppPreferences {
   defaultBudgetId: string | null;
   transactionSortField?: TransactionSortField;
@@ -196,8 +197,8 @@ const EXPENSE_FREQUENCIES: Array<{ value: ExpenseFrequency; label: string; descr
   { value: 'yearly', label: 'Yearly', description: 'Once per year' },
 ];
 const GUIDED_TOUR_STEPS: Array<{ selector: string; fallbackSelector?: string; view: AppState['view']; title: string; body: string }> = [
-  { selector: '.budget-tabs', view: 'dashboard', title: 'Plan month by month', body: 'Switch between monthly budgets or add a month. Planned items carry forward, actuals start fresh, and the new month uses your selected carryover rule.' },
-  { selector: '.metric-grid', view: 'dashboard', title: 'See what is available', body: 'Compare planned and actual income, carryover, unallocated income, and the amount assigned across your categories.' },
+  { selector: '.budget-tabs', view: 'dashboard', title: 'Plan month by month', body: 'Switch between monthly budgets or add a month to close out the current one for Reports. Planned items carry forward, actuals start fresh, and the new month uses your selected carryover rule.' },
+  { selector: '.metric-grid', view: 'dashboard', title: 'See what is available', body: 'Compare planned income and carryover with unallocated funds, planned category allocations, and actual spending.' },
   { selector: '.at-a-glance .summary-disclosure', view: 'dashboard', title: 'Check your monthly summary', body: 'Expand Income and Categories to compare planned amounts, actuals, and differences. Top spending highlights the largest recorded expenses.' },
   { selector: '.categories-section .section-title-row', view: 'dashboard', title: 'Build your budget plan', body: 'Create categories and add budget items for income, bills, expenses, subscriptions, debts, or savings. Items keep planned amounts separate from recorded activity.' },
   { selector: '.entry-line', fallbackSelector: '.categories-section .section-title-row', view: 'dashboard', title: 'Review and edit an item', body: 'Click a budget item to open its history, then edit a transaction there if needed. Use the separate pencil button to update the budget item.' },
@@ -207,7 +208,7 @@ const GUIDED_TOUR_STEPS: Array<{ selector: string; fallbackSelector?: string; vi
   { selector: '.transactions-panel .panel-heading-actions', view: 'transactions', title: 'Record and manage activity', body: 'Add an income or expense transaction here. Edit or delete individual rows in the table, or use the selection controls to delete multiple transactions.' },
   { selector: '.subscription-page .page-heading .heading-actions', view: 'subscriptions', title: 'Track upcoming renewals', body: 'See subscription due dates on the monthly calendar and review the monthly cost estimate. Add subscriptions here, or manage, pause, and update recurring schedules.' },
   { selector: '.review-stats', view: 'review', title: 'Review the month', body: 'Compare recorded income and spending with your plan, see what remains after actuals, and identify categories that are over or under plan.' },
-  { selector: '.report-choice-card', fallbackSelector: '.report-page .page-heading', view: 'reports', title: 'Explore reports', body: 'Run Budget Performance, Cash Flow & Leftover Income, or Spending Trends. Reports can compare the months available in your budget series.' },
+  { selector: '.report-choice-card', fallbackSelector: '.report-page .page-heading', view: 'reports', title: 'Explore reports', body: 'Run Budget Performance, Cash Flow & Leftover Income, Spending Trends, or Where Your Money Went. Reports can compare the months available in your budget series.' },
   { selector: '.settings-page-heading', view: 'settings', title: 'Make the app yours', body: 'Choose a theme, accent, text size, and layout density. Set currency and date formats, the calendar week start, and how carryover is calculated.' },
   { selector: '.sidebar .backup-actions', view: 'dashboard', title: 'Keep a backup', body: 'Export a backup file or import one to restore or move budget data. Backups are manual, so keep a copy somewhere safe.' },
 ];
@@ -255,6 +256,7 @@ const REPORT_CHOICES: Array<{ id: ReportId; title: string; description: string }
   { id: 'performance', title: 'Budget Performance', description: 'Compare planned and actual income and spending by category and budget item.' },
   { id: 'cashflow', title: 'Cash Flow & Leftover Income', description: 'Review monthly income, spending, carryover, and ending balances.' },
   { id: 'trends', title: 'Spending Trends', description: 'Explore category and item spending over time, including subscription costs.' },
+  { id: 'breakdown', title: 'Where Your Money Went', description: 'Compare recorded income with total outflow and rank budget items by amount.' },
 ];
 const isAccentColor = (value: unknown): value is AccentColor => ACCENT_COLORS.some(([option]) => option === value);
 const isDensityPreference = (value: unknown): value is DensityPreference => DENSITIES.some(([option]) => option === value);
@@ -266,6 +268,9 @@ function normalizeState(budgets: Budget[], active: string | null | undefined, pr
   const allBudgets = budgets.filter((budget) => Array.isArray(budget.categories)).map((budget) => ({
     ...budget,
     seriesId: budget.seriesId || budget.id,
+    isClosed: typeof budget.isClosed === 'boolean'
+      ? budget.isClosed
+      : budgets.some((candidate) => (candidate.seriesId || candidate.id) === (budget.seriesId || budget.id) && candidate.month > budget.month),
     carryover: Number(budget.carryover) || 0,
     selectedTypes: budget.selectedTypes || GROUPS.map((group) => group.id),
     transactions: Array.isArray(budget.transactions) ? budget.transactions.map((transaction) => ({ ...transaction, entryId: transaction.entryId ?? null })) : [],
@@ -367,7 +372,7 @@ const transactionSortConfig = (): TransactionSortConfig => ({
 const transactionSortLabel = (field: TransactionSortField): string => ({ date: 'Date', type: 'Budget item', category: 'Category', description: 'Description', amount: 'Amount' })[field];
 const transactionTypeName = (budget: Budget, transaction: BudgetTransaction): string => {
   const category = budget.categories.find((item) => item.id === transaction.categoryId);
-  return category?.entries.find((entry) => entry.id === transaction.entryId)?.name ?? category?.name ?? 'Uncategorized';
+  return category?.entries.find((entry) => entry.id === transaction.entryId)?.name ?? (category ? 'No budget item — unplanned' : 'Uncategorized');
 };
 const sortTransactions = (budget: Budget): BudgetTransaction[] => {
   const { field, direction } = transactionSortConfig();
@@ -574,7 +579,7 @@ function render(): void {
     dashboard: 'Dashboard',
     transactions: 'Transactions',
     subscriptions: 'Subscription Tracking',
-    review: 'Monthly Review',
+    review: 'Monthly Check-in',
     reports: 'Reports',
     settings: 'Settings',
   };
@@ -582,7 +587,7 @@ function render(): void {
     ? state.view === 'settings' ? settingsPage()
       : state.view === 'subscriptions' ? subscriptionTrackingPage(budget, seriesBudgets(budget.seriesId))
       : state.view === 'review' ? monthlyReviewPage(budget)
-        : state.view === 'reports' ? reportsPage(seriesBudgets(budget.seriesId))
+        : state.view === 'reports' ? reportsPage(seriesBudgets(budget.seriesId).filter((month) => month.isClosed))
           : dashboard(budget, seriesBudgets(budget.seriesId))
     : state.view === 'reports'
       ? reportsPage([])
@@ -594,7 +599,7 @@ function render(): void {
       <button class="sidebar-nav-item ${state.view === 'dashboard' ? 'active' : ''}" data-action="navigate" data-page="dashboard" ${state.view === 'dashboard' ? 'aria-current="page"' : ''}><span aria-hidden="true">⌂</span>Dashboard</button>
       <button class="sidebar-nav-item ${state.view === 'transactions' ? 'active' : ''}" data-action="navigate" data-page="transactions" ${state.view === 'transactions' ? 'aria-current="page"' : ''}><span aria-hidden="true">⇄</span>Transactions</button>
       <button class="sidebar-nav-item ${state.view === 'subscriptions' ? 'active' : ''}" data-action="navigate" data-page="subscriptions" ${state.view === 'subscriptions' ? 'aria-current="page"' : ''}><span aria-hidden="true">◷</span>Subscription Tracking</button>
-      <button class="sidebar-nav-item ${state.view === 'review' ? 'active' : ''}" data-action="navigate" data-page="review" ${state.view === 'review' ? 'aria-current="page"' : ''}><span aria-hidden="true">✓</span>Monthly Review</button>
+      <button class="sidebar-nav-item ${state.view === 'review' ? 'active' : ''}" data-action="navigate" data-page="review" ${state.view === 'review' ? 'aria-current="page"' : ''}><span aria-hidden="true">✓</span>Monthly Check-in</button>
       <button class="sidebar-nav-item ${state.view === 'reports' ? 'active' : ''}" data-action="navigate" data-page="reports" ${state.view === 'reports' ? 'aria-current="page"' : ''}><span aria-hidden="true">▤</span>Reports</button>
     </nav>
     <div class="backup-actions"><button type="button" data-action="export-backup">Export backup</button><button type="button" data-action="import-backup">Import backup</button><input id="backup-file" type="file" accept="application/json,.json" hidden></div>
@@ -831,10 +836,11 @@ function dashboard(b: Budget, budgets: Budget[]): string {
   const isTransactionsPage = state.view === 'transactions';
   const monthActions = `<div class="heading-actions">${isTransactionsPage ? '' : '<button class="button button-primary" type="button" data-action="new-transaction"><span>+</span>Quick Transaction</button>'}<details class="budget-menu"><summary class="button button-secondary budget-menu-trigger" aria-label="More options" title="More options">⋯</summary><div class="budget-menu-panel"><button type="button" data-action="delete-month">Delete this month</button></div></details></div>`;
   return `<section class="dashboard">${monthTabs(b, budgets, monthActions)}
-    <section class="metric-grid" aria-label="Income allocation summary" ${isTransactionsPage ? 'hidden' : ''}>
+    <section class="metric-grid" aria-label="Monthly budget totals" ${isTransactionsPage ? 'hidden' : ''}>
       ${metricCard('Income + Carryover', '↗', plannedAvailableIncome, `<span>Planned income ${fmt(summary.income.planned)}</span><span>Carryover ${fmt(summary.carryover)}</span>`)}
-      ${metricCard('Unallocated Income', '◷', summary.plannedLeft, '<span>Available income not yet allocated</span>', summary.plannedLeft < 0 ? 'negative' : 'positive')}
+      ${metricCard('Unallocated Income', '◷', summary.plannedLeft, '<span>Available income not yet allocated</span>', summary.plannedLeft < 0 ? 'negative' : '')}
       ${metricCard('Allocated Income', '≋', summary.out.planned, '<span>Planned across categories</span>')}
+      ${metricCard('Actuals', '↻', summary.out.actual, '<span>Actual across categories</span>', summary.out.actual < summary.out.planned ? 'positive' : summary.out.actual > summary.out.planned ? 'negative' : '')}
     </section>
     <section class="dashboard-grid dashboard-insights" ${isTransactionsPage ? 'hidden' : ''}>
       <section class="panel at-a-glance"><div class="panel-heading"><div><p class="panel-kicker">MONTHLY SUMMARY</p><h2>At-A-Glance</h2></div></div>
@@ -844,38 +850,229 @@ function dashboard(b: Budget, budgets: Budget[]): string {
       <section class="panel top-spending"><div class="panel-heading"><div><p class="panel-kicker">WHERE IT WENT</p><h2>Top spending</h2></div><span class="count-badge">${top.length} / 20</span></div>${top.length ? `<ol class="top-list">${top.map((item, index) => `<li><span class="rank">${String(index + 1).padStart(2, '0')}</span><span class="top-copy"><strong>${esc(item.name)}</strong><small>${esc(item.category)} · ${esc(item.budgetItem)}</small></span><span class="top-amount">${fmt(item.actual)}</span></li>`).join('')}</ol>` : '<div class="quiet-empty">Actual spending will appear here as you record it.</div>'}</section>
     </section>
     <section class="categories-section" ${isTransactionsPage ? 'hidden' : ''}><div class="section-title-row"><div><p class="panel-kicker">YOUR PLAN</p><h2>Budget categories</h2></div><button class="button button-secondary" data-action="add-category">＋ Add category</button></div><div class="category-grid">${groups.map((groupItem) => categoryCard(groupItem, b)).join('')}</div></section>
-    <section class="transactions-panel panel" ${isTransactionsPage ? '' : 'hidden'}><div class="panel-heading"><div><p class="panel-kicker">RECORDED ACTIVITY</p><h2>Transactions</h2></div><div class="panel-heading-actions"><span class="count-badge">${b.transactions.length}</span><button class="button button-primary" data-action="new-transaction"><span>+</span> Add transaction</button></div></div><div class="transaction-tools"><label class="transaction-filter">Search<input id="transaction-search" type="search" value="${esc(transactionSearch)}" placeholder="Description, budget item, category, or date"></label><label class="transaction-filter">Budget item<select id="transaction-item-filter"><option value="all">All budget items</option>${b.categories.flatMap((category) => category.entries.map((entry) => `<option value="${esc(entry.id)}" ${transactionItemFilter === entry.id ? 'selected' : ''}>${esc(category.name)} · ${esc(entry.name)}</option>`)).join('')}${hasCategoryOnlyTransactions ? `<option value="category-only" ${transactionItemFilter === 'category-only' ? 'selected' : ''}>Category only</option>` : ''}</select></label><label class="transaction-filter">Category<select id="transaction-category-filter"><option value="all">All categories</option>${b.categories.map((category) => `<option value="${esc(category.id)}" ${transactionCategoryFilter === category.id ? 'selected' : ''}>${esc(category.name)}</option>`).join('')}</select></label><label class="transaction-filter">Sort by<select id="transaction-sort-field">${(['date', 'description', 'type', 'category', 'amount'] as TransactionSortField[]).map((field) => `<option value="${field}" ${transactionSortConfig().field === field ? 'selected' : ''}>${transactionSortLabel(field)}</option>`).join('')}</select></label><div class="transaction-filter transaction-direction"><span>Direction</span><button class="button button-secondary" type="button" data-action="toggle-transaction-sort-direction">${transactionSortConfig().direction === 'asc' ? 'Ascending' : 'Descending'}</button></div><div class="transaction-bulk"><span id="transaction-selection-count" aria-live="polite">0 selected</span><button class="button button-secondary" type="button" data-action="select-visible">Select visible</button><button class="button button-secondary" type="button" data-action="clear-selection" disabled>Clear selection</button><button class="button button-danger" type="button" data-action="delete-selected" disabled>Delete selected</button></div></div>${b.transactions.length ? `<div class="table-scroll"><table><thead><tr><th><span class="visually-hidden">Select</span></th><th>DATE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>BUDGET ITEM</th><th>AMOUNT</th><th></th></tr></thead><tbody>${transactionRows}</tbody></table></div><p id="transaction-no-results" class="transaction-no-results" hidden>No transactions match these filters.</p>` : '<div class="quiet-empty">No transactions recorded this month.</div>'}</section></section>`;
+    <section class="transactions-panel panel" ${isTransactionsPage ? '' : 'hidden'}><div class="panel-heading"><div><p class="panel-kicker">RECORDED ACTIVITY</p><h2>Transactions</h2></div><div class="panel-heading-actions"><span class="count-badge">${b.transactions.length}</span><button class="button button-primary" data-action="new-transaction"><span>+</span> Add transaction</button></div></div><div class="transaction-tools"><label class="transaction-filter">Search<input id="transaction-search" type="search" value="${esc(transactionSearch)}" placeholder="Description, budget item, category, or date"></label><label class="transaction-filter">Budget item<select id="transaction-item-filter"><option value="all">All budget items</option>${b.categories.flatMap((category) => category.entries.map((entry) => `<option value="${esc(entry.id)}" ${transactionItemFilter === entry.id ? 'selected' : ''}>${esc(category.name)} · ${esc(entry.name)}</option>`)).join('')}${hasCategoryOnlyTransactions ? `<option value="category-only" ${transactionItemFilter === 'category-only' ? 'selected' : ''}>No budget item — unplanned</option>` : ''}</select></label><label class="transaction-filter">Category<select id="transaction-category-filter"><option value="all">All categories</option>${b.categories.map((category) => `<option value="${esc(category.id)}" ${transactionCategoryFilter === category.id ? 'selected' : ''}>${esc(category.name)}</option>`).join('')}</select></label><label class="transaction-filter">Sort by<select id="transaction-sort-field">${(['date', 'description', 'type', 'category', 'amount'] as TransactionSortField[]).map((field) => `<option value="${field}" ${transactionSortConfig().field === field ? 'selected' : ''}>${transactionSortLabel(field)}</option>`).join('')}</select></label><div class="transaction-filter transaction-direction"><span>Direction</span><button class="button button-secondary" type="button" data-action="toggle-transaction-sort-direction">${transactionSortConfig().direction === 'asc' ? 'Ascending' : 'Descending'}</button></div><div class="transaction-bulk"><span id="transaction-selection-count" aria-live="polite">0 selected</span><button class="button button-secondary" type="button" data-action="select-visible">Select visible</button><button class="button button-secondary" type="button" data-action="clear-selection" disabled>Clear selection</button><button class="button button-danger" type="button" data-action="delete-selected" disabled>Delete selected</button></div></div>${b.transactions.length ? `<div class="table-scroll"><table><thead><tr><th><span class="visually-hidden">Select</span></th><th>DATE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>BUDGET ITEM</th><th>AMOUNT</th><th></th></tr></thead><tbody>${transactionRows}</tbody></table></div><p id="transaction-no-results" class="transaction-no-results" hidden>No transactions match these filters.</p>` : '<div class="quiet-empty">No transactions recorded this month.</div>'}</section></section>`;
 }
 
 function monthlyReviewPage(budget: Budget): string {
   const summary = totals(budget);
-  const activity = budget.categories
+  const spendingCategories = budget.categories
     .filter((category) => category.type !== 'income')
     .map((category) => ({ category, ...categoryTotals(budget, category) }))
-    .map((item) => ({ ...item, difference: item.actual - item.planned }))
-    .filter((item) => item.actual !== 0);
-  const overPlan = activity.filter((item) => item.difference > 0.01).sort((left, right) => right.difference - left.difference);
-  const underPlan = activity.filter((item) => item.difference < -0.01).sort((left, right) => left.difference - right.difference);
-  const overTotal = overPlan.reduce((total, item) => total + item.difference, 0);
-  const underTotal = underPlan.reduce((total, item) => total - item.difference, 0);
-  const progress = summary.out.planned > 0 ? Math.round(summary.out.actual / summary.out.planned * 100) : summary.out.actual > 0 ? 100 : 0;
-  const progressWidth = Math.min(100, progress);
-  const renderReviewRows = (items: typeof activity): string => items.slice(0, 3).map(({ category, planned, actual, difference }) => `<div class="review-row"><span><strong>${esc(category.name)}</strong><small>${fmt(actual)} actual · ${fmt(planned)} planned</small></span><strong class="${difference > 0 ? 'negative' : 'positive'}">${signed(difference)}</strong></div>`).join('');
-  const hasActivity = budget.transactions.length > 0 || budget.categories.some((category) => category.entries.some((entry) => entry.actual !== 0));
-  const breakdown = hasActivity
-    ? `<div class="review-breakdown"><section class="review-column"><h3>Over plan <strong>${fmt(overTotal)}</strong></h3>${renderReviewRows(overPlan) || '<p class="review-empty">No categories are over plan.</p>'}${overPlan.length > 3 ? `<small class="review-more">And ${overPlan.length - 3} more</small>` : ''}</section><section class="review-column"><h3>Under plan <strong>${fmt(underTotal)}</strong></h3>${renderReviewRows(underPlan) || '<p class="review-empty">No recorded spending is under plan.</p>'}${underPlan.length > 3 ? `<small class="review-more">And ${underPlan.length - 3} more</small>` : ''}</section></div>`
-    : '<p class="review-empty">Record income or spending to see a useful comparison with your plan.</p>';
-  return `<section class="dashboard page-content">${monthTabs(budget, seriesBudgets(budget.seriesId))}<div class="page-heading"><div><p class="panel-kicker">MONTHLY RECAP</p><h1>${esc(monthText(budget.month))} review</h1><p class="heading-subtitle">A snapshot of recorded activity against the plan for this month.</p></div></div><div class="review-stats"><div><span>Income recorded</span><strong>${fmt(summary.income.actual)}</strong><small>${fmt(summary.income.planned)} planned · ${signed(summary.income.actual - summary.income.planned)}</small></div><div><span>Spending recorded</span><strong>${fmt(summary.out.actual)}</strong><small>of ${fmt(summary.out.planned)} planned</small></div><div><span>Left after actuals</span><strong class="${summary.actualLeft < 0 ? 'negative' : 'positive'}">${fmt(summary.actualLeft)}</strong><small>including carryover</small></div></div><section class="review-progress"><div><strong>Spending against plan</strong><span>${progress}% used</span></div><div class="review-progress-track" role="meter" aria-label="Spending against plan" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressWidth}"><span style="width:${progressWidth}%"></span></div><small>${fmt(summary.out.actual)} recorded of ${fmt(summary.out.planned)} planned</small></section>${breakdown}</section>`;
+    .map((item) => ({ ...item, difference: item.actual - item.planned, remaining: item.planned - item.actual }))
+    .filter((item) => item.planned !== 0 || item.actual !== 0)
+    .sort((left, right) => right.difference - left.difference);
+  const incomeSources = budget.categories
+    .filter((category) => category.type === 'income')
+    .flatMap((category) => category.entries.map((entry) => ({
+      name: entry.name,
+      planned: entry.planned,
+      actual: entryActual(budget, entry),
+    })))
+    .filter((source) => source.planned !== 0 || source.actual !== 0);
+  const incomeCategoryIds = new Set(budget.categories.filter((category) => category.type === 'income').map((category) => category.id));
+  const incomeEntryIds = new Set(budget.categories
+    .filter((category) => category.type === 'income')
+    .flatMap((category) => category.entries.map((entry) => entry.id)));
+  const unassignedIncome = budget.transactions
+    .filter((transaction) => incomeCategoryIds.has(transaction.categoryId)
+      && (!transaction.entryId || !incomeEntryIds.has(transaction.entryId)))
+    .reduce((total, transaction) => total + transaction.amount, 0);
+  if (unassignedIncome !== 0) incomeSources.push({ name: 'Income transactions without a budget item', planned: 0, actual: unassignedIncome });
+  const spendingTransactions = budget.transactions
+    .flatMap((transaction) => {
+      const category = budget.categories.find((item) => item.id === transaction.categoryId);
+      return category && category.type !== 'income'
+        ? [{
+          transaction,
+          category: category.name,
+          item: category.entries.find((entry) => entry.id === transaction.entryId)?.name ?? 'No budget item — unplanned',
+        }]
+        : [];
+    })
+    .sort((left, right) => right.transaction.amount - left.transaction.amount);
+  const largestTransactions = spendingTransactions.slice(0, 5);
+  const unplannedByCategory = new Map<string, { category: string; total: number; transactions: BudgetTransaction[] }>();
+  for (const transaction of budget.transactions) {
+    if (transaction.entryId) continue;
+    const category = budget.categories.find((item) => item.id === transaction.categoryId);
+    if (!category || category.type === 'income') continue;
+    const group = unplannedByCategory.get(category.id) ?? { category: category.name, total: 0, transactions: [] };
+    group.total += transaction.amount;
+    group.transactions.push(transaction);
+    unplannedByCategory.set(category.id, group);
+  }
+  const unplannedGroups = [...unplannedByCategory.values()]
+    .map((group) => ({
+      ...group,
+      transactions: group.transactions.sort((left, right) => right.amount - left.amount),
+    }))
+    .sort((left, right) => right.total - left.total);
+  const unplannedCount = unplannedGroups.reduce((count, group) => count + group.transactions.length, 0);
+  const unplannedActivity = unplannedCount
+    ? `<section class="review-unplanned"><div class="review-unplanned-heading"><div><h3>Unplanned activity</h3><p>These transactions have no budget item but are included in their category actuals.</p></div><span class="count-badge">${unplannedCount}</span></div><div class="review-unplanned-groups">${unplannedGroups.map((group) => `<section class="review-unplanned-group"><h4><span>${esc(group.category)}</span><strong>${fmt(group.total)}</strong></h4><ul>${group.transactions.map((transaction) => `<li><span><strong>${esc(transaction.description)}</strong><small>${esc(displayDate(transaction.date))}</small></span><strong>${fmt(transaction.amount)}</strong></li>`).join('')}</ul></section>`).join('')}</div></section>`
+    : '<section class="review-unplanned review-unplanned-empty"><div class="review-unplanned-heading"><div><h3>Unplanned activity</h3><p>No spending transactions are missing a budget item.</p></div><span class="count-badge">0</span></div></section>';
+  const hasActivity = summary.income.actual !== 0 || summary.out.actual !== 0;
+  const highlights: Array<{ title: string; detail: string; kind: string }> = [];
+  const largestOverPlan = spendingCategories.find((item) => item.difference > 0.01);
+  const largestRemaining = [...spendingCategories]
+    .filter((item) => item.remaining > 0.01)
+    .sort((left, right) => right.remaining - left.remaining)[0];
+  const incomeDifference = summary.income.actual - summary.income.planned;
+  if (!hasActivity) {
+    highlights.push({
+      title: 'No activity recorded yet',
+      detail: 'The plan is ready. Record income and spending as they happen to keep this check-in current.',
+      kind: 'neutral',
+    });
+  } else {
+    if (largestOverPlan) {
+      highlights.push({
+        title: 'Largest amount over plan',
+        detail: `${largestOverPlan.category.name} is ${fmt(largestOverPlan.difference)} over its ${fmt(largestOverPlan.planned)} plan so far.`,
+        kind: 'alert',
+      });
+    }
+    if (summary.income.planned <= 0 && summary.income.actual > 0) {
+      highlights.push({
+        title: 'Income recorded without a plan',
+        detail: `${fmt(summary.income.actual)} in income is recorded, but no planned income amount is set.`,
+        kind: 'neutral',
+      });
+    } else if (incomeDifference < -0.01) {
+      highlights.push({
+        title: 'Income below plan so far',
+        detail: `${fmt(Math.abs(incomeDifference))} less income is recorded than planned for the full month.`,
+        kind: 'neutral',
+      });
+    } else if (incomeDifference > 0.01) {
+      highlights.push({
+        title: 'Income above plan so far',
+        detail: `${fmt(incomeDifference)} more income is recorded than planned for the full month.`,
+        kind: 'positive',
+      });
+    }
+    if (summary.plannedLeft < -0.01 && highlights.length < 3) {
+      highlights.push({
+        title: 'Allocations exceed available income',
+        detail: `Planned categories are ${fmt(Math.abs(summary.plannedLeft))} above planned income and carryover.`,
+        kind: 'alert',
+      });
+    } else if (summary.plannedLeft > 0.01 && highlights.length < 3) {
+      highlights.push({
+        title: 'Income still to allocate',
+        detail: `${fmt(summary.plannedLeft)} of planned income and carryover is not allocated to categories.`,
+        kind: 'neutral',
+      });
+    }
+    if (largestRemaining && highlights.length < 3) {
+      highlights.push({
+        title: 'Most plan remaining',
+        detail: `${largestRemaining.category.name} has ${fmt(largestRemaining.remaining)} of its plan remaining.`,
+        kind: 'neutral',
+      });
+    }
+    if (!highlights.length) {
+      highlights.push({
+        title: 'No category is over plan',
+        detail: 'Recorded spending is within the planned amount for each category so far.',
+        kind: 'positive',
+      });
+    }
+  }
+  const spendingRemaining = summary.out.planned - summary.out.actual;
+  const spendingRemainingLabel = spendingRemaining > 0.01
+    ? 'left in the full-month plan'
+    : spendingRemaining < -0.01
+      ? 'over the full-month plan'
+      : 'on plan';
+  const spentPercent = summary.out.planned > 0 ? Math.round(summary.out.actual / summary.out.planned * 100) : null;
+  const spentWidth = Math.min(100, spentPercent ?? 0);
+  const [budgetYear, budgetMonth] = budget.month.split('-').map(Number);
+  const daysInMonth = new Date(budgetYear, budgetMonth, 0).getDate();
+  const today = new Date();
+  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  const elapsedDays = budget.month < currentMonth ? daysInMonth : budget.month === currentMonth ? today.getDate() : 0;
+  const monthElapsedPercent = Math.round(elapsedDays / daysInMonth * 100);
+  const monthTiming = budget.month < currentMonth
+    ? 'Month complete'
+    : budget.month === currentMonth
+      ? `${elapsedDays} of ${daysInMonth} days elapsed`
+      : 'Month has not started';
+  const varianceClass = (difference: number, isIncome = false): string => {
+    if (Math.abs(difference) <= 0.01) return '';
+    return (difference > 0) === isIncome ? 'positive' : 'negative';
+  };
+  const categoryRows = spendingCategories.map((item) => {
+    const usedPercent = item.planned > 0 ? Math.round(item.actual / item.planned * 100) : null;
+    const meterWidth = Math.min(100, usedPercent ?? (item.actual > 0 ? 100 : 0));
+    const remainingLabel = item.remaining > 0.01
+      ? `${fmt(item.remaining)} left`
+      : item.remaining < -0.01
+        ? `${fmt(Math.abs(item.remaining))} over`
+        : 'On plan';
+    const remainingClass = varianceClass(item.difference);
+    return `<tr><th scope="row" class="review-category-cell"><strong>${esc(item.category.name)}</strong><small>${item.category.entries.length} ${item.category.entries.length === 1 ? 'item' : 'items'}</small><div class="review-category-track ${item.remaining < -0.01 ? 'over-plan' : ''}" role="meter" aria-label="${esc(item.category.name)} spending against plan" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${meterWidth}"><span style="width:${meterWidth}%"></span></div></th><td>${fmt(item.planned)}</td><td>${fmt(item.actual)}</td><td class="review-variance ${remainingClass}">${remainingLabel}</td><td>${usedPercent === null ? item.actual > 0 ? 'No plan' : '—' : `${usedPercent}%`}</td></tr>`;
+  }).join('');
+  const incomeRows = incomeSources.map((source) => {
+    const difference = source.actual - source.planned;
+    return `<tr><th scope="row">${esc(source.name)}</th><td>${fmt(source.planned)}</td><td>${fmt(source.actual)}</td><td class="review-variance ${varianceClass(difference, true)}">${signed(difference)}</td></tr>`;
+  }).join('');
+  const transactionRows = largestTransactions.map(({ transaction, category, item }) =>
+    `<tr><td>${esc(displayDate(transaction.date))}</td><th scope="row" class="review-transaction-name"><strong>${esc(transaction.description)}</strong><small>${esc(category)} · ${esc(item)}</small></th><td>${fmt(transaction.amount)}</td></tr>`).join('');
+  const checkInSubtitle = budget.isClosed
+    ? 'This month is closed out. You can still make corrections; Reports will reflect the latest saved data.'
+    : 'Live progress against this month’s plan, updated as you record income and spending.';
+  return `<section class="dashboard page-content review-page">
+    ${monthTabs(budget, seriesBudgets(budget.seriesId))}
+    <div class="page-heading"><div><p class="panel-kicker">MONTHLY CHECK-IN</p><h1>${esc(monthText(budget.month))} check-in</h1><p class="heading-subtitle">${checkInSubtitle}</p></div></div>
+    <div class="review-stats" aria-label="Month-to-date summary">
+      <article><span>Income recorded</span><strong>${fmt(summary.income.actual)}</strong><small>${fmt(summary.income.planned)} planned · ${signed(incomeDifference)} difference</small></article>
+      <article><span>Spending recorded</span><strong>${fmt(summary.out.actual)}</strong><small>of ${fmt(summary.out.planned)} planned</small></article>
+      <article><span>Spending plan remaining</span><strong class="${varianceClass(-spendingRemaining)}">${fmt(Math.abs(spendingRemaining))}</strong><small>${spendingRemainingLabel}</small></article>
+      <article><span>Left after actuals</span><strong class="${summary.actualLeft < 0 ? 'negative' : 'positive'}">${fmt(summary.actualLeft)}</strong><small>including carryover</small></article>
+    </div>
+    <section class="review-progress" aria-label="Spending progress">
+      <div><strong>Spending against the full-month plan</strong><span>${spentPercent === null ? 'No spending plan entered' : `${spentPercent}% used · ${monthElapsedPercent}% of month elapsed`}</span></div>
+      ${spentPercent === null
+        ? `<p class="review-progress-empty">${fmt(summary.out.actual)} recorded so far; add planned amounts to compare against a spending plan.</p>`
+        : `<div class="review-progress-track ${spentPercent > 100 ? 'over-plan' : ''}" role="meter" aria-label="Spending against monthly plan" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${spentWidth}"><span style="width:${spentWidth}%"></span></div><small>${fmt(summary.out.actual)} recorded of ${fmt(summary.out.planned)} planned · ${monthTiming}</small>`}
+      <small class="review-caveat">Calendar time is context, not a forecast; bills and one-time costs can make spending uneven through the month.</small>
+    </section>
+    <section class="panel report-panel review-panel">
+      <div class="panel-heading"><div><p class="panel-kicker">QUICK READ</p><h2>What stands out</h2></div><span class="count-badge">${highlights.length}</span></div>
+      <div class="review-highlights">${highlights.map((item) => `<article class="review-highlight ${item.kind}"><strong>${esc(item.title)}</strong><p>${esc(item.detail)}</p></article>`).join('')}</div>
+      ${unplannedActivity}
+    </section>
+    <section class="panel report-panel review-panel">
+      <div class="panel-heading"><div><p class="panel-kicker">FULL-MONTH PLAN</p><h2>Spending by category</h2></div><span class="count-badge">${spendingCategories.length}</span></div>
+      <p class="report-description">All planned non-income categories are shown, including categories with no activity yet. Spending includes bills, expenses, savings, and debt payments.</p>
+      <div class="report-table-scroll"><table class="report-table review-table"><thead><tr><th scope="col">Category</th><th scope="col">Planned</th><th scope="col">Actual</th><th scope="col">Remaining / over</th><th scope="col">Used</th></tr></thead><tbody>${categoryRows || '<tr><td colspan="5" class="review-empty">No spending categories have planned or recorded amounts yet.</td></tr>'}</tbody></table></div>
+    </section>
+    <section class="panel report-panel review-panel">
+      <div class="panel-heading"><div><p class="panel-kicker">INCOME PLAN</p><h2>Income sources</h2></div><span class="count-badge">${incomeSources.length}</span></div>
+      <p class="report-description">Income actuals include entered amounts and transactions linked to each source.</p>
+      <div class="report-table-scroll"><table class="report-table review-table"><thead><tr><th scope="col">Source</th><th scope="col">Planned</th><th scope="col">Actual</th><th scope="col">Difference</th></tr></thead><tbody>${incomeRows || '<tr><td colspan="4" class="review-empty">No income sources have planned or recorded amounts yet.</td></tr>'}</tbody></table></div>
+    </section>
+    <section class="panel report-panel review-panel">
+      <div class="panel-heading"><div><p class="panel-kicker">RECORDED ACTIVITY</p><h2>Largest spending transactions</h2></div><span class="count-badge">${largestTransactions.length} of ${spendingTransactions.length}</span></div>
+      <p class="report-description">The largest transactions recorded so far, by amount. Manual actual amounts are included in the summaries above.</p>
+      <div class="report-table-scroll"><table class="report-table review-table"><thead><tr><th scope="col">Date</th><th scope="col">Transaction</th><th scope="col">Amount</th></tr></thead><tbody>${transactionRows || '<tr><td colspan="3" class="review-empty">No spending transactions recorded yet.</td></tr>'}</tbody></table></div>
+    </section>
+  </section>`;
 }
 
 function reportsPage(budgets: Budget[]): string {
   const months = [...budgets].sort((left, right) => left.month.localeCompare(right.month));
   if (!months.length) {
     activeReport = null;
+    if (state.budgets.length) {
+      const latest = latestInSeries(state.budgets[0].seriesId);
+      return `<section class="dashboard page-content report-page"><div class="page-heading"><div><p class="panel-kicker">MONTH-END REPORTS</p><h1>Reports</h1><p class="heading-subtitle">Reports are available for months you’ve closed out.</p></div></div><div class="panel report-empty"><h2>No closed months yet</h2><p>${latest ? `Create the next month to close out ${esc(monthText(latest.month))} and make it available here. ` : ''}Closed months remain editable, and reports always use the latest saved data.</p></div></section>`;
+    }
     return '<section class="dashboard page-content report-page"><div class="page-heading"><div><p class="panel-kicker">BUDGET INSIGHTS</p><h1>Reports</h1><p class="heading-subtitle">Choose a report to run.</p></div></div><div class="panel report-empty"><h2>Reports need a budget</h2><p>Create a budget and add planned amounts or transactions to see your reports here.</p></div></section>';
   }
   if (!activeReport) {
-    return `<section class="dashboard page-content report-page"><div class="page-heading"><div><p class="panel-kicker">BUDGET INSIGHTS</p><h1>Reports</h1><p class="heading-subtitle">Choose a report to run.</p></div></div><div class="report-choice-list">${REPORT_CHOICES.map((report, index) => `<article class="panel report-choice-card"><span class="report-choice-number">${String(index + 1).padStart(2, '0')}</span><div class="report-choice-copy"><h2>${esc(report.title)}</h2><p>${esc(report.description)}</p></div><button class="button button-primary" type="button" data-action="run-report" data-report="${report.id}">Run report <span>→</span></button></article>`).join('')}</div></section>`;
+    return `<section class="dashboard page-content report-page"><div class="page-heading"><div><p class="panel-kicker">MONTH-END REPORTS</p><h1>Reports</h1><p class="heading-subtitle">Choose a report for your closed months. Reports use the latest saved data.</p></div></div><div class="report-choice-list">${REPORT_CHOICES.map((report, index) => `<article class="panel report-choice-card"><span class="report-choice-number">${String(index + 1).padStart(2, '0')}</span><div class="report-choice-copy"><h2>${esc(report.title)}</h2><p>${esc(report.description)}</p></div><button class="button button-primary" type="button" data-action="run-report" data-report="${report.id}">Run report <span>→</span></button></article>`).join('')}</div></section>`;
   }
 
   const reportDetails = REPORT_CHOICES.find((report) => report.id === activeReport);
@@ -948,6 +1145,39 @@ function reportsPage(budgets: Budget[]): string {
   const closingTotals = monthlyTotals[monthlyTotals.length - 1].summary;
   const cashFlowRows = monthlyTotals.map(({ budget, summary }) =>
     `<tr><th scope="row">${esc(monthText(budget.month))}</th><td>${fmt(summary.income.planned)}</td><td>${fmt(summary.income.actual)}</td><td>${fmt(summary.carryover)}</td><td>${fmt(summary.out.planned)}</td><td>${fmt(summary.out.actual)}</td><td class="${summary.plannedLeft < 0 ? 'negative' : 'positive'}">${fmt(summary.plannedLeft)}</td><td class="${summary.actualLeft < 0 ? 'negative' : 'positive'}">${fmt(summary.actualLeft)}</td></tr>`).join('');
+  const spendingBreakdown = new Map<string, { name: string; category: string; actual: number }>();
+  for (const budget of selectedMonths) {
+    for (const category of budget.categories.filter((item) => item.type !== 'income')) {
+      const categoryKey = `${category.type}::${category.name.trim().toLocaleLowerCase()}`;
+      for (const entry of category.entries) {
+        const key = `${categoryKey}::${entry.name.trim().toLocaleLowerCase()}`;
+        const item = spendingBreakdown.get(key) ?? { name: entry.name, category: category.name, actual: 0 };
+        item.actual += entryActual(budget, entry);
+        spendingBreakdown.set(key, item);
+      }
+      const entryIds = new Set(category.entries.map((entry) => entry.id));
+      const unassigned = budget.transactions
+        .filter((transaction) => transaction.categoryId === category.id && (!transaction.entryId || !entryIds.has(transaction.entryId)))
+        .reduce((total, transaction) => total + transaction.amount, 0);
+      if (unassigned !== 0) {
+        const key = `${categoryKey}::unassigned transactions`;
+        const item = spendingBreakdown.get(key) ?? { name: 'Unassigned transactions', category: category.name, actual: 0 };
+        item.actual += unassigned;
+        spendingBreakdown.set(key, item);
+      }
+    }
+  }
+  const rankedSpending = [...spendingBreakdown.values()]
+    .filter((item) => item.actual > 0)
+    .sort((left, right) => right.actual - left.actual || left.name.localeCompare(right.name) || left.category.localeCompare(right.category));
+  const spendingBreakdownRows = rankedSpending.map((item, index) => {
+    const share = actualSpending > 0 ? Math.round(item.actual / actualSpending * 100) : 0;
+    return `<tr><td>${index + 1}</td><th scope="row">${esc(item.name)}</th><td>${esc(item.category)}</td><td>${fmt(item.actual)}</td><td>${share}%</td></tr>`;
+  }).join('');
+  const spendingBreakdownContent = spendingBreakdownRows
+    ? `<div class="report-table-scroll"><table class="report-table report-spending-table"><thead><tr><th>#</th><th>Budget item</th><th>Category</th><th>Total outflow</th><th>Share</th></tr></thead><tbody>${spendingBreakdownRows}</tbody></table></div>`
+    : '<p class="report-empty-copy">Record spending or outflows to see your budget items ranked here.</p>';
+  const spendingBreakdownPanel = `<section class="panel report-panel"><div class="panel-heading"><div><p class="panel-kicker">WHERE YOUR MONEY WENT</p><h2>Income vs. outflow</h2></div><span class="count-badge">${rankedSpending.length} ${rankedSpending.length === 1 ? 'item' : 'items'}</span></div><div class="report-metrics"><article><span>Income recorded</span><strong>${fmt(actualIncome)}</strong></article><article><span>Total outflow</span><strong>${fmt(actualSpending)}</strong></article><article><span>Income less outflow</span><strong class="${actualIncome < actualSpending ? 'negative' : 'positive'}">${fmt(actualIncome - actualSpending)}</strong><small>Excludes opening carryover</small></article></div><p class="report-description">Recorded outflow across ${esc(rangeDescription)} includes bills, expenses, subscriptions, debt, savings, and custom non-income groups. Budget items are ranked from highest to lowest total outflow.</p>${spendingBreakdownContent}</section>`;
 
   const trends = new Map<string, SpendingTrendCategory>();
   for (const budget of selectedMonths) {
@@ -1017,7 +1247,7 @@ function reportsPage(budgets: Budget[]): string {
   const performancePanel = `<section class="panel report-panel"><div class="panel-heading"><div><p class="panel-kicker">BUDGET PERFORMANCE</p><h2>Planned vs. actual</h2></div><span class="count-badge">${selectedMonths.length} ${selectedMonths.length === 1 ? 'month' : 'months'}</span></div><p class="report-description">Compare planned and actual amounts by category and budget item for ${esc(rangeDescription)}. Income above plan is favorable; spending above plan is highlighted.</p>${performanceContent}</section>`;
   const cashFlowPanel = `<section class="panel report-panel"><div class="panel-heading"><div><p class="panel-kicker">CASH FLOW</p><h2>Income and leftover</h2></div></div><div class="report-metrics"><article><span>Actual income in period</span><strong>${fmt(actualIncome)}</strong></article><article><span>Actual spending in period</span><strong>${fmt(actualSpending)}</strong></article><article><span>Closing actual leftover</span><strong class="${closingTotals.actualLeft < 0 ? 'negative' : 'positive'}">${fmt(closingTotals.actualLeft)}</strong><small>Including opening carryover in ${esc(monthText(latestMonth))}</small></article></div><p class="report-description">Follow actual and planned cash flow month by month. Ending leftover includes that month's carryover and is not summed across months.</p><div class="report-table-scroll"><table class="report-table report-cashflow-table"><thead><tr><th>Month</th><th>Income planned</th><th>Income actual</th><th>Opening carryover</th><th>Spending planned</th><th>Spending actual</th><th>Planned leftover</th><th>Actual leftover</th></tr></thead><tbody>${cashFlowRows}</tbody></table></div></section>`;
   const trendsPanel = `<section class="panel report-panel"><div class="panel-heading"><div><p class="panel-kicker">SPENDING TRENDS</p><h2>Spending over time</h2></div><span class="count-badge">${trendRows.length} ${trendRows.length === 1 ? 'category' : 'categories'}</span></div><p class="report-description">Compare category spending across the selected months. Expand a category to inspect budget items; subscription-category spending is called out separately.</p><div class="report-metrics"><article><span>Actual spending in period</span><strong>${fmt(periodSpend)}</strong></article><article><span>Subscription actuals</span><strong>${fmt(subscriptionSpend)}</strong><small>${fmt(subscriptionPlanned)} planned in period</small></article><article><span>Largest monthly increase</span><strong>${largestChangeValue}</strong><small>${esc(largestChangeNote)}</small></article></div><p class="report-latest-note">Latest-month total: ${fmt(latestSpend)} · Comparison: ${previousMonth ? `${esc(monthText(previousMonth))} to ${esc(monthText(latestMonth))}` : 'select a range with at least two months'}</p>${trendContent}</section>`;
-  const selectedPanel = activeReport === 'performance' ? performancePanel : activeReport === 'cashflow' ? cashFlowPanel : trendsPanel;
+  const selectedPanel = activeReport === 'performance' ? performancePanel : activeReport === 'cashflow' ? cashFlowPanel : activeReport === 'trends' ? trendsPanel : spendingBreakdownPanel;
   return `<section class="dashboard page-content report-page">${pageHeading}${selectedPanel}</section>`;
 }
 
@@ -1287,6 +1517,8 @@ function deleteCurrentMonth(): void {
   recalculateCarryovers(seriesId);
   const remaining = seriesBudgets(seriesId);
   const previous = remaining.filter((item) => item.month < month).at(-1);
+  const reopenedPrevious = !budget.isClosed && previous?.isClosed ? previous : undefined;
+  if (reopenedPrevious) reopenedPrevious.isClosed = false;
   const fallback = previous || remaining[0] || [...state.budgets].sort((a, b) => b.month.localeCompare(a.month))[0];
   state.active = fallback?.id ?? null;
   if (!fallback) state.view = 'dashboard';
@@ -1294,6 +1526,7 @@ function deleteCurrentMonth(): void {
     if (!state.budgets.some((item) => item.id === removedBudget.id)) {
       state.budgets.splice(Math.min(removedIndex, state.budgets.length), 0, removedBudget);
     }
+    if (reopenedPrevious) reopenedPrevious.isClosed = true;
     recalculateCarryovers(seriesId);
     state.active = removedBudget.id;
   });
@@ -1337,7 +1570,7 @@ function newMonthDialog(): void {
     : 'actual leftover (actual income and carryover minus actual spending)';
   const carryoverLabel = carryoverMethod === 'planned' ? 'Planned unallocated income' : 'Actual leftover';
   const month = monthAfter(source.month);
-  open(`<form class="dialog-form" data-form="month" data-source="${esc(source.id)}"><div class="dialog-topline"><span class="dialog-icon">◷</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">CLOSE ${esc(monthText(source.month).toUpperCase())}</p><h2>Create the next month?</h2><p class="dialog-copy">This will end ${esc(monthText(source.month))}. Planned categories and amounts will carry forward, actuals will reset to zero, and ${carryoverDescription} will become the next month’s carryover.</p><label for="new-month">New month</label><input id="new-month" name="month" type="month" value="${month}" required><p class="carryover-preview">${carryoverLabel} to next month <strong>${fmt(carryover)}</strong></p><p class="form-error" id="month-error" aria-live="polite"></p><div class="dialog-actions"><button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">Confirm and create month <span>→</span></button></div></form>`);
+  open(`<form class="dialog-form" data-form="month" data-source="${esc(source.id)}"><div class="dialog-topline"><span class="dialog-icon">◷</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">CLOSE ${esc(monthText(source.month).toUpperCase())}</p><h2>Create the next month?</h2><p class="dialog-copy">This closes out ${esc(monthText(source.month))} for Reports. You can still edit it later, and reports will use the latest saved data. Planned categories and amounts will carry forward, actuals will reset to zero, and ${carryoverDescription} will become the next month’s carryover.</p><label for="new-month">New month</label><input id="new-month" name="month" type="month" value="${month}" required><p class="carryover-preview">${carryoverLabel} to next month <strong>${fmt(carryover)}</strong></p><p class="form-error" id="month-error" aria-live="polite"></p><div class="dialog-actions"><button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">Confirm and create month <span>→</span></button></div></form>`);
 }
 function expenseScheduleDialog(categoryId: string, schedule?: RecurringExpenseSchedule, sourceEntry?: BudgetEntry): void {
   const budget = current();
@@ -1493,7 +1726,7 @@ function restoreExpenseSchedule(scheduleId: string, snapshots: ExpenseScheduleBu
 }
 function transactionItemOptions(categoryId: string, selectedEntryId: string | null = null): string {
   const category = current()?.categories.find((item) => item.id === categoryId);
-  return `<option value="" ${selectedEntryId ? '' : 'selected'}>Category only</option>${category?.entries.map((entry) => `<option value="${esc(entry.id)}" ${entry.id === selectedEntryId ? 'selected' : ''}>${esc(entry.name)}</option>`).join('') ?? ''}`;
+  return `<option value="" ${selectedEntryId ? '' : 'selected'}>No budget item — unplanned</option>${category?.entries.map((entry) => `<option value="${esc(entry.id)}" ${entry.id === selectedEntryId ? 'selected' : ''}>${esc(entry.name)}</option>`).join('') ?? ''}`;
 }
 function transactionGoalOptions(categoryId: string, entryId: string | null, selectedGoalId: string | null = null): string {
   const entry = current()?.categories.find((category) => category.id === categoryId)?.entries.find((item) => item.id === entryId);
@@ -1517,6 +1750,13 @@ function transactionDialog(transaction: BudgetTransaction | null = null, duplica
   const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const selectedEntryId = transaction?.entryId ?? entryId ?? null;
   open(`<form class="dialog-form" data-form="transaction" data-transaction="${esc(transaction?.id ?? '')}"><div class="dialog-topline"><span class="dialog-icon">${transaction ? '↗' : '＋'}</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">${transaction ? 'UPDATE RECORDED ACTIVITY' : 'RECORD ACTUAL ACTIVITY'}</p><h2>${transaction ? 'Edit transaction' : 'Add transaction'}</h2><label for="transaction-date">Date</label><input id="transaction-date" name="date" type="date" value="${esc(transaction?.date ?? todayString)}" required><label for="transaction-description">Description</label><input id="transaction-description" name="description" maxlength="100" value="${esc(transaction?.description ?? '')}" placeholder="e.g. Grocery store" required><label for="transaction-amount">Amount</label><div class="input-money"><span>$</span><input id="transaction-amount" name="amount" type="number" min="0.01" step="0.01" value="${transaction ? esc(transaction.amount) : ''}" placeholder="0.00" required></div><label for="transaction-category">Budget category</label><select id="transaction-category" name="categoryId" required>${budget.categories.map((category) => `<option value="${esc(category.id)}" ${category.id === selectedCategoryId ? 'selected' : ''}>${esc(categoryOptionLabel(category))}</option>`).join('')}</select><label for="transaction-entry">Budget item <span>(optional)</span></label><select id="transaction-entry" name="entryId">${transactionItemOptions(selectedCategoryId, selectedEntryId)}</select><div id="transaction-savings-goal-field" ${budget.categories.find((category) => category.id === selectedCategoryId)?.type === 'savings' && selectedEntryId ? '' : 'hidden'}><label for="transaction-savings-goal">Savings goal <span>(optional)</span></label><select id="transaction-savings-goal" name="savingsGoalId">${transactionGoalOptions(selectedCategoryId, selectedEntryId, transaction?.savingsGoalId ?? null)}</select></div><div class="dialog-actions">${transaction ? '<button class="button button-danger" data-action="delete-transaction" data-transaction="' + esc(transaction.id) + '" type="button">Delete</button>' : '<span></span>'}<button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">${transaction ? 'Save changes' : 'Add transaction'}</button></div></form>`);
+  const transactionItemSelect = requiredElement<HTMLSelectElement>(dialog, '#transaction-entry');
+  transactionItemSelect.setAttribute('aria-describedby', 'transaction-item-help');
+  const transactionItemHelp = document.createElement('small');
+  transactionItemHelp.id = 'transaction-item-help';
+  transactionItemHelp.className = 'transaction-item-help';
+  transactionItemHelp.textContent = 'Choose this when the transaction has no matching planned item. It still counts toward the selected category’s actuals.';
+  transactionItemSelect.after(transactionItemHelp);
   if (transaction && duplicate) {
     requiredElement<HTMLFormElement>(dialog, 'form').dataset.transaction = '';
     requiredElement<HTMLElement>(dialog, '.panel-kicker').textContent = 'CREATE A COPY OF RECORDED ACTIVITY';
@@ -2002,7 +2242,7 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
     if (!selectedGroups.some((group) => group.id === 'income')) selectedGroups.unshift(GROUPS[0]);
     const selectedTypes = selectedGroups.map((group) => group.id);
     const now = new Date(), month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const b = { id: uid(), seriesId: uid(), name: 'Budget', month, carryover: 0, selectedTypes, categories: defaultCategories(selectedGroups), transactions: [], incomeSchedules: [], expenseSchedules: [] };
+    const b = { id: uid(), seriesId: uid(), name: 'Budget', month, isClosed: false, carryover: 0, selectedTypes, categories: defaultCategories(selectedGroups), transactions: [], incomeSchedules: [], expenseSchedules: [] };
     state.budgets = [b]; state.active = b.id; state.view = 'dashboard'; dashboardTab = 'overview'; wizard = { budgetId: b.id, groups: selectedTypes, step: 0 }; persist(); wizardView();
   } else if (form.dataset.form === 'month') {
     const source = state.budgets.find((item) => item.id === form.dataset.source);
@@ -2069,6 +2309,7 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
     const carryoverMethod = state.preferences.carryoverMethod ?? 'actual';
     const b = {
       id: uid(), seriesId: template.seriesId, name: template.name, month,
+      isClosed: false,
       carryover: carryoverAmount(template, carryoverMethod),
       carryoverMethod,
       selectedTypes: [...(template.selectedTypes || GROUPS.map((g) => g.id))],
@@ -2077,6 +2318,7 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
       incomeSchedules: [...(template.incomeSchedules || [])],
       expenseSchedules,
     };
+    template.isClosed = true;
     state.budgets.push(b); state.active = b.id; state.view = 'dashboard'; persist(); dialog.close(); render();
   } else if (form.dataset.form === 'expense-schedule') {
     const budget = current();

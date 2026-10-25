@@ -25,6 +25,7 @@ function isBudget(value) {
     && typeof value.name === 'string'
     && typeof value.month === 'string'
     && (value.seriesId === undefined || typeof value.seriesId === 'string')
+    && (value.isClosed === undefined || typeof value.isClosed === 'boolean')
     && (value.carryoverMethod === undefined || ['actual', 'planned'].includes(value.carryoverMethod))
     && (value.selectedTypes === undefined || (Array.isArray(value.selectedTypes) && value.selectedTypes.every((type) => typeof type === 'string')))
     && Array.isArray(value.categories)

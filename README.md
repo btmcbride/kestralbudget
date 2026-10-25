@@ -40,7 +40,7 @@ Kestral Budget brings your monthly plan and actual spending together. Plan incom
 - **Shape your setup:** Organize your budget with the categories, sections, and items that make sense to you. Choose your currency, date format, theme, and layout.
 - **Track the details:** Log transactions against budget items, then search, filter, sort, and manage activity in bulk.
 - **Keep due dates visible:** Add due dates to bills, subscriptions, and debts, and see upcoming subscriptions on a calendar.
-- **Learn from the numbers:** Use Budget Performance, Cash Flow & Leftover Income, and Spending Trends reports to explore your budget over time.
+- **Learn from the numbers:** Use Budget Performance, Cash Flow & Leftover Income, Spending Trends, and Where Your Money Went reports to explore your budget over time.
 
 ## Core workflows
 
@@ -54,7 +54,7 @@ Click a budget item to review its transaction history. Use the separate pencil b
 
 ### Record and review transactions
 
-Use **Quick Transaction** on the dashboard or **Add transaction** on the Transactions page to record income or spending and assign it to a category and budget item. From Transactions, search, filter, sort, edit or delete individual records, and select transactions for bulk deletion.
+Use **Quick Transaction** on the dashboard or **Add transaction** on the Transactions page to record income or spending and assign it to a category and budget item. For activity without a matching planned item, choose **No budget item — unplanned**; it still counts toward the category’s actuals and appears in the Monthly Check-in. From Transactions, search, filter, sort, edit or delete individual records, and select transactions for bulk deletion.
 
 ### Plan recurring costs and renewals
 
@@ -62,7 +62,9 @@ Schedule a planned expense from its category for a weekly, biweekly, monthly, or
 
 ### Review progress and reports
 
-The dashboard summarizes income, allocation, and top spending. **Monthly Review** compares recorded activity with the plan and highlights categories over or under plan. **Reports** provides Budget Performance, Cash Flow & Leftover Income, and Spending Trends for the available months in your budget series.
+The dashboard summarizes income, allocation, and top spending. **Monthly Check-in** shows live income and spending totals, remaining category plans, notable variances, and the largest recorded transactions. Calendar progress is shown as context, not a forecast. Creating the next month closes out the previous month for **Reports**; closed months remain editable, and reports reflect the latest saved data.
+
+**Reports** provides Budget Performance, Cash Flow & Leftover Income, Spending Trends, and Where Your Money Went for the available months in your budget series. The spending breakdown compares recorded income with total outflow and ranks budget items from highest to lowest; outflow includes savings and debt activity as well as expenses.
 
 ### Personalize and protect your data
 
@@ -169,7 +171,10 @@ Open `http://localhost:8080`. Stop it with `podman compose down`; the named volu
 
 ## Data and privacy
 
-Kestral Budget has no accounts, bank connections, cloud sync, or automatic backups. The desktop app stores data on your computer; the self-hosted edition stores it in its configured database volume. Keep independent backups of important data.
+Kestral Budget has no accounts, bank connections, cloud sync, or automatic backups. The desktop app stores data on your computer; the self-hosted edition stores it in its configured database volume. Optional AI notes run on the computer hosting the app and use no hosted AI provider. Keep independent backups of important data.
+
+### Removing optional AI components
+
 
 ## License
 

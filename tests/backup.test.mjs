@@ -37,6 +37,13 @@ test('backup round-trips yearly subscription schedules', () => {
   assert.deepEqual(parseBackup(createBackup(subscriptionState)), subscriptionState);
 });
 
+test('backup round-trips closed-month status', () => {
+  const closedState = structuredClone(state);
+  closedState.budgets[0].isClosed = true;
+
+  assert.deepEqual(parseBackup(createBackup(closedState)), closedState);
+});
+
 test('backup round-trips optional subscription reminder dates', () => {
   const subscriptionState = structuredClone(state);
   subscriptionState.budgets[0].categories[0].type = 'subscriptions';
@@ -108,4 +115,8 @@ test('backup rejects invalid settings preferences', () => {
   const invalidBudget = structuredClone(state);
   invalidBudget.budgets[0].carryoverMethod = 'future';
   assert.throws(() => createBackup(invalidBudget));
+
+  const invalidClosedStatus = structuredClone(state);
+  invalidClosedStatus.budgets[0].isClosed = 'closed';
+  assert.throws(() => createBackup(invalidClosedStatus));
 });
