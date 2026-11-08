@@ -2,8 +2,12 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { app, BrowserWindow, dialog } = require('electron');
 
-app.setName('Kestral Budget');
-app.setAppUserModelId('com.kestralbudget.desktop');
+const packageMetadata = require(path.join(app.getAppPath(), 'package.json'));
+const isDevBuild = packageMetadata.kestralBuildChannel === 'dev';
+const appName = isDevBuild ? 'Kestral Budget Dev' : 'Kestral Budget';
+app.setName(appName);
+app.setAppUserModelId(isDevBuild ? 'com.kestralbudget.desktop.dev' : 'com.kestralbudget.desktop');
+if (isDevBuild) app.setPath('userData', path.join(app.getPath('appData'), appName));
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();

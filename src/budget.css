@@ -36,8 +36,7 @@ body{background:radial-gradient(circle at top,var(--surface-3) 0,var(--canvas) 4
 .panel,.category-card,.dialog,.tour-callout,.wizard{box-shadow:var(--shadow-soft)}
 .category-card{padding:14px 15px;border:1px solid var(--line);border-radius:var(--radius-lg);background:linear-gradient(180deg,var(--surface) 0,var(--surface-3) 100%)}
 .category-card:hover{border-color:#41484f;box-shadow:var(--shadow-raise)}
-.category-header{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:10px}
-.category-actions{display:flex;align-items:center;gap:6px}
+.category-header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px}
 .transaction-tools{grid-template-columns:minmax(170px,1fr) minmax(150px,.7fr) minmax(140px,.7fr) auto auto;gap:10px}
 .transaction-direction{display:grid;gap:5px;align-items:end;color:var(--muted);font-size:calc(10px * var(--text-scale, 1))}
 .transaction-direction .button{min-width:104px}

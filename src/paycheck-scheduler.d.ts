@@ -31,4 +31,5 @@ export interface ScheduledPaydayEntry {
 export function isWithinMonth(dateString: string, monthString: string): boolean;
 export function getPayFrequencyIntervalDays(frequency: PayFrequency): number;
 export function buildIncomeEntriesForMonth(schedule: PaycheckSchedule, monthString: string): ScheduledPaydayEntry[];
+export function getScheduledIncomeTotalForMonth(schedule: PaycheckSchedule, monthString: string): number;
 export function buildExpenseEntriesForMonth(schedule: RecurringExpenseSchedule, monthString: string): ScheduledPaydayEntry[];
