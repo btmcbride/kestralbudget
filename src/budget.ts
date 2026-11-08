@@ -2010,7 +2010,6 @@ document.addEventListener('click', (event: MouseEvent) => {
     transactionCategoryFilter = category;
     transactionItemFilter = 'category-only';
     transactionSearch = '';
-    transactionFiltersExpanded = true;
     state.view = 'transactions';
     dashboardTab = 'transactions';
     render();
