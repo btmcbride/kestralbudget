@@ -85,39 +85,41 @@
 }
 
 .transaction-tools{
-  grid-template-columns:minmax(0,1fr) minmax(190px,.55fr);
-  align-items:start;
+  grid-template-columns:minmax(0,1fr);
+  align-items:stretch;
 }
-.transaction-search{grid-column:1}
-.transaction-advanced-filters{grid-column:2;min-width:0}
+.transaction-search,.transaction-filter-toolbar,.transaction-bulk{grid-column:1;min-width:0}
+.transaction-filter-toolbar{display:flex;align-items:center;gap:8px}
+.transaction-advanced-filters{position:relative;flex:0 0 auto}
 .transaction-advanced-filters>summary{
-  display:flex;min-height:36px;align-items:center;justify-content:space-between;gap:10px;
-  padding:0 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);
-  color:var(--text-soft);font-size:calc(12px * var(--text-scale, 1));cursor:pointer;list-style:none
+  display:grid;width:40px;height:40px;place-items:center;
+  border:1px solid var(--line);border-radius:6px;background:var(--surface);
+  color:var(--text-soft);cursor:pointer;list-style:none
 }
 .transaction-advanced-filters>summary::-webkit-details-marker{display:none}
-.transaction-advanced-filters>summary::after{content:"+";color:var(--muted);font-size:16px}
-.transaction-advanced-filters[open]>summary::after{content:"−"}
+.transaction-advanced-filters>summary:hover,.transaction-advanced-filters[open]>summary{border-color:var(--line-strong);background:var(--line-soft)}
+.transaction-advanced-filters>summary svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.7}
 .transaction-filter-controls{
-  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding-top:10px
+  position:absolute;z-index:30;top:calc(100% + 8px);left:0;
+  display:grid;width:min(680px,calc(100vw - 48px));grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;
+  padding:16px;border:1px solid var(--line);border-radius:8px;background:var(--surface);
+  box-shadow:0 16px 40px #0008
 }
-.transaction-bulk{grid-column:1/-1}
 .transaction-bulk .button{flex:0 0 auto}
+.transaction-filter input,.transaction-filter select{height:40px;padding:0 12px;border-radius:6px;font-size:calc(13px * var(--text-scale, 1))}
+.transaction-direction .button{min-height:40px;border-radius:6px;font-size:calc(12px * var(--text-scale, 1))}
 
 @media(max-width:900px){
-  .transaction-tools{grid-template-columns:minmax(0,1fr) minmax(0,.8fr)}
-  .transaction-filter-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .transaction-tools{grid-template-columns:minmax(0,1fr)}
 }
 
 @media(max-width:720px){
   .transaction-tools{grid-template-columns:minmax(0,1fr)}
-  .transaction-search,.transaction-advanced-filters,.transaction-bulk{grid-column:1}
-  .transaction-filter-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
   .transaction-bulk span{flex:0 1 auto}
 }
 
 @media(max-width:430px){
-  .transaction-filter-controls{grid-template-columns:minmax(0,1fr)}
+  .transaction-filter-controls{grid-template-columns:minmax(0,1fr);gap:10px;padding:12px}
   .transaction-bulk{gap:8px}
 }
 

@@ -54,7 +54,7 @@ Click a budget item to review its transaction history. Use the separate pencil b
 
 ### Record and review transactions
 
-Use **Quick Transaction** on the dashboard or **Add transaction** on the Transactions page to record income or spending and assign it to a category and budget item. For activity without a matching planned item, choose **No budget item — unplanned**; it still counts toward the category’s actuals and appears in the Monthly Check-in. From Transactions, search immediately or expand **Filters and sorting** to narrow or reorder activity. Select visible transactions to reveal bulk-selection actions; edit or delete individual records from the table.
+Use **Quick Transaction** on the dashboard or **Add transaction** on the Transactions page to record income or spending and assign it to a category and budget item. For activity without a matching planned item, choose **No budget item — unplanned**; it still counts toward the category’s actuals and appears in the Monthly Check-in. From Transactions, search immediately or open the funnel-shaped **Filters and sorting** control to filter by category or budget item and change sorting. **Clear filters** resets the search and filters without changing the sort order. Select transactions to reveal bulk actions, including changing their category and budget item; edit or delete individual records from the table.
 
 ### Plan recurring costs and renewals
 
@@ -62,7 +62,7 @@ Schedule a planned expense from its category for a weekly, biweekly, monthly, or
 
 ### Review progress and reports
 
-The dashboard summarizes income, allocation, and a short top-spending preview; expand **At-A-Glance** to see income and category details. **Monthly Check-in** shows live income and spending totals, remaining category plans, notable variances, and the largest recorded transactions. Income and transaction tables can be expanded when needed. Calendar progress is shown as context, not a forecast. Before creating a new month, a handoff summarizes the ending month’s category actuals, plan variances, unplanned transactions, and carryover. Creating the next month closes out the previous month for **Reports**; closed months remain editable, and reports reflect the latest saved data.
+The dashboard summarizes income, allocation, and a short top-spending preview; expand **At-A-Glance** to see income and category details. Category cards show unplanned transactions as a separate activity row with their actual total; select the row to review those transactions. **Monthly Check-in** shows live income and spending totals, remaining category plans, notable variances, and the largest recorded transactions. Income and transaction tables can be expanded when needed. Calendar progress is shown as context, not a forecast. Before creating a new month, a handoff summarizes the ending month’s category actuals, plan variances, unplanned transactions, and carryover. Creating the next month closes out the previous month for **Reports**; closed months remain editable, and reports reflect the latest saved data.
 
 **Reports** provides Budget Performance, Cash Flow & Leftover Income, Spending Trends, and Where Your Money Went for the available months in your budget series. The spending breakdown compares recorded income with total outflow and ranks budget items from highest to lowest; outflow includes savings and debt activity as well as expenses.
 

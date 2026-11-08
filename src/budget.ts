@@ -777,10 +777,16 @@ function dashboard(b: Budget, budgets: Budget[]): string {
   const groups = groupsFor(b);
   const incomeCategories = b.categories.filter((category) => category.type === 'income');
   const spendingCategories = b.categories.filter((category) => category.type !== 'income');
-  const incomeRows = incomeCategories.flatMap((category) => category.entries.map((entry) => {
+  let incomeRows = incomeCategories.flatMap((category) => category.entries.map((entry) => {
     const actual = entryActual(b, entry);
     return `<tr><td>${esc(entry.name)}</td><td>${fmt(entry.planned)}</td><td>${fmt(actual)}</td><td class="${actual < entry.planned ? 'negative' : actual > entry.planned ? 'positive' : ''}">${signed(actual - entry.planned)}</td></tr>`;
   })).join('');
+  const incomeCategoryIds = new Set(incomeCategories.map((category) => category.id));
+  const unassignedIncomeTransactions = b.transactions.filter((transaction) => incomeCategoryIds.has(transaction.categoryId) && !transaction.entryId);
+  if (unassignedIncomeTransactions.length) {
+    const unassignedIncome = unassignedIncomeTransactions.reduce((total, transaction) => total + transaction.amount, 0);
+    incomeRows += `<tr><td>Income without a budget item</td><td>${fmt(0)}</td><td>${fmt(unassignedIncome)}</td><td class="${unassignedIncome > 0 ? 'positive' : ''}">${signed(unassignedIncome)}</td></tr>`;
+  }
   const categoryRows = spendingCategories.map((category) => {
     const amount = categoryTotals(b, category);
     return `<tr><td>${esc(category.name)}</td><td>${fmt(amount.planned)}</td><td>${fmt(amount.actual)}</td><td class="${amount.actual > amount.planned ? 'negative' : amount.actual < amount.planned ? 'positive' : ''}">${signed(amount.actual - amount.planned)}</td></tr>`;
@@ -797,7 +803,9 @@ function dashboard(b: Budget, budgets: Budget[]): string {
       ? [{
         name: transaction.description,
         category: category.name,
-        budgetItem: category.entries.find((entry) => entry.id === transaction.entryId)?.name ?? transaction.description,
+        budgetItem: transaction.entryId
+          ? category.entries.find((entry) => entry.id === transaction.entryId)?.name ?? 'Unplanned activity'
+          : 'Unplanned activity',
         actual: transaction.amount,
       }]
       : [];
@@ -854,16 +862,19 @@ function dashboard(b: Budget, budgets: Budget[]): string {
       <div class="panel-heading"><div><p class="panel-kicker">RECORDED ACTIVITY</p><h2>Transactions</h2></div><div class="panel-heading-actions"><span class="count-badge">${b.transactions.length}</span><button class="button button-primary" data-action="new-transaction"><span>+</span> Add transaction</button></div></div>
       <div class="transaction-tools">
         <label class="transaction-filter transaction-search">Search<input id="transaction-search" type="search" value="${esc(transactionSearch)}" placeholder="Description, budget item, category, or date"></label>
-        <details class="transaction-advanced-filters" ${transactionFiltersExpanded ? 'open' : ''}>
-          <summary>Filters and sorting</summary>
-          <div class="transaction-filter-controls">
-            <label class="transaction-filter">Budget item<select id="transaction-item-filter"><option value="all">All budget items</option>${b.categories.flatMap((category) => category.entries.map((entry) => `<option value="${esc(entry.id)}" ${transactionItemFilter === entry.id ? 'selected' : ''}>${esc(category.name)} · ${esc(entry.name)}</option>`)).join('')}${hasCategoryOnlyTransactions ? `<option value="category-only" ${transactionItemFilter === 'category-only' ? 'selected' : ''}>No budget item — unplanned</option>` : ''}</select></label>
-            <label class="transaction-filter">Category<select id="transaction-category-filter"><option value="all">All categories</option>${b.categories.map((category) => `<option value="${esc(category.id)}" ${transactionCategoryFilter === category.id ? 'selected' : ''}>${esc(category.name)}</option>`).join('')}</select></label>
-            <label class="transaction-filter">Sort by<select id="transaction-sort-field">${(['date', 'description', 'type', 'category', 'amount'] as TransactionSortField[]).map((field) => `<option value="${field}" ${transactionSortConfig().field === field ? 'selected' : ''}>${transactionSortLabel(field)}</option>`).join('')}</select></label>
-            <div class="transaction-filter transaction-direction"><span>Direction</span><button class="button button-secondary" type="button" data-action="toggle-transaction-sort-direction">${transactionSortConfig().direction === 'asc' ? 'Ascending' : 'Descending'}</button></div>
-          </div>
-        </details>
-        <div class="transaction-bulk"><span id="transaction-selection-count" aria-live="polite" hidden>0 selected</span><button class="button button-secondary" type="button" data-action="select-visible">Select visible</button><button class="button button-secondary" type="button" data-action="clear-selection" disabled hidden>Clear selection</button><button class="button button-danger" type="button" data-action="delete-selected" disabled hidden>Delete selected</button></div>
+        <div class="transaction-filter-toolbar">
+          <details class="transaction-advanced-filters" ${transactionFiltersExpanded ? 'open' : ''}>
+            <summary aria-label="Filters and sorting" title="Filters and sorting"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16l-6.2 7.1v5.1l-3.6 1.8v-6.9L4 5Z"></path></svg></summary>
+            <div class="transaction-filter-controls">
+              <label class="transaction-filter">Budget item<select id="transaction-item-filter"><option value="all">All budget items</option>${b.categories.flatMap((category) => category.entries.map((entry) => `<option value="${esc(entry.id)}" ${transactionItemFilter === entry.id ? 'selected' : ''}>${esc(category.name)} · ${esc(entry.name)}</option>`)).join('')}${hasCategoryOnlyTransactions ? `<option value="category-only" ${transactionItemFilter === 'category-only' ? 'selected' : ''}>No budget item — unplanned</option>` : ''}</select></label>
+              <label class="transaction-filter">Category<select id="transaction-category-filter"><option value="all">All categories</option>${b.categories.map((category) => `<option value="${esc(category.id)}" ${transactionCategoryFilter === category.id ? 'selected' : ''}>${esc(category.name)}</option>`).join('')}</select></label>
+              <label class="transaction-filter">Sort by<select id="transaction-sort-field">${(['date', 'description', 'type', 'category', 'amount'] as TransactionSortField[]).map((field) => `<option value="${field}" ${transactionSortConfig().field === field ? 'selected' : ''}>${transactionSortLabel(field)}</option>`).join('')}</select></label>
+              <div class="transaction-filter transaction-direction"><span>Direction</span><button class="button button-secondary" type="button" data-action="toggle-transaction-sort-direction">${transactionSortConfig().direction === 'asc' ? 'Ascending' : 'Descending'}</button></div>
+            </div>
+          </details>
+          <button class="button button-secondary transaction-clear-filters" type="button" data-action="clear-transaction-filters">Clear filters</button>
+        </div>
+        <div class="transaction-bulk"><span id="transaction-selection-count" aria-live="polite" hidden>0 selected</span><button class="button button-secondary" type="button" data-action="select-visible">Select visible</button><button class="button button-secondary" type="button" data-action="edit-selected" disabled hidden>Edit category / item</button><button class="button button-secondary" type="button" data-action="clear-selection" disabled hidden>Clear selection</button><button class="button button-danger" type="button" data-action="delete-selected" disabled hidden>Delete selected</button></div>
       </div>
       ${b.transactions.length ? `<div class="table-scroll"><table><thead><tr><th><span class="visually-hidden">Select</span></th><th>DATE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>BUDGET ITEM</th><th>AMOUNT</th><th></th></tr></thead><tbody>${transactionRows}</tbody></table></div><p id="transaction-no-results" class="transaction-no-results" hidden>No transactions match these filters.</p>` : '<div class="quiet-empty">No transactions recorded this month.</div>'}
     </section></section>`;
@@ -1401,6 +1412,7 @@ function updateTransactionSelectionUI(): void {
   const count = root.querySelector<HTMLElement>('#transaction-selection-count');
   const deleteButton = root.querySelector<HTMLButtonElement>('[data-action="delete-selected"]');
   const clearButton = root.querySelector<HTMLButtonElement>('[data-action="clear-selection"]');
+  const editButton = root.querySelector<HTMLButtonElement>('[data-action="edit-selected"]');
   const selectVisibleButton = root.querySelector<HTMLButtonElement>('[data-action="select-visible"]');
   const visibleCount = root.querySelectorAll('[data-transaction-row]:not([hidden])').length;
   if (count) count.textContent = `${selectedCount} selected`;
@@ -1409,6 +1421,8 @@ function updateTransactionSelectionUI(): void {
   if (deleteButton) deleteButton.hidden = selectedCount === 0;
   if (clearButton) clearButton.disabled = selectedCount === 0;
   if (clearButton) clearButton.hidden = selectedCount === 0;
+  if (editButton) editButton.disabled = selectedCount === 0;
+  if (editButton) editButton.hidden = selectedCount === 0;
   if (selectVisibleButton) selectVisibleButton.disabled = visibleCount === 0;
 }
 function categoryCard(g: BudgetGroup, budget: Budget): string {
@@ -1431,7 +1445,9 @@ function categoryCard(g: BudgetGroup, budget: Budget): string {
   const symbol = symbols[g.id] || '●';
   const body = cats.length
     ? cats.map((category) => {
-      const itemRows = category.entries.length
+      const unplannedTransactions = budget.transactions.filter((transaction) => transaction.categoryId === category.id && !transaction.entryId);
+      const unplannedActual = unplannedTransactions.reduce((total, transaction) => total + transaction.amount, 0);
+      const itemRows = category.entries.length || unplannedTransactions.length
         ? `<div class="entry-columns" aria-hidden="true"><span></span><span>Due date</span><span>Planned</span><span>Actual</span></div>${category.entries.map((entry) => {
           const actualForEntry = entryActual(budget, entry);
           const goals = entry.goals ?? [];
@@ -1441,7 +1457,9 @@ function categoryCard(g: BudgetGroup, budget: Budget): string {
             ? `${PAY_FREQUENCIES.find((item) => item.value === expenseSchedule.frequency)?.label ?? 'Recurring'} · ${displayDate(entry.scheduledDate ?? expenseSchedule.nextDueDate)}`
             : entry.dueDate ? displayDate(entry.dueDate) : '';
           return `<div class="entry-line"><button class="entry-row ${goalsMet ? 'savings-goals-met' : ''}" data-action="${g.id === 'savings' ? 'savings-details' : 'entry-history'}" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" aria-label="${esc(entry.name)}${dueLabel ? `: due ${dueLabel}` : ''}, planned ${fmt(entry.planned)}, actual ${fmt(actualForEntry)}${goalsMet ? ', all savings goals met' : ''}"><span class="entry-name">${esc(entry.name)}${goalsMet ? '<span class="savings-goal-badge">✓ Goals met</span>' : ''}</span><span class="entry-due">${esc(dueLabel)}</span><span class="entry-planned">${fmt(entry.planned)}</span><span class="entry-actual ${actualForEntry > +entry.planned && g.id !== 'income' ? 'negative' : ''}">${fmt(actualForEntry)}</span></button><button class="entry-edit" data-action="edit-entry" data-category="${esc(category.id)}" data-entry="${esc(entry.id)}" type="button" aria-label="Edit ${esc(entry.name)}" title="Edit">✎</button></div>`;
-        }).join('')}`
+        }).join('')}${unplannedTransactions.length
+          ? `<button class="entry-row unplanned-entry-row" type="button" data-action="view-unplanned" data-category="${esc(category.id)}" aria-label="View ${unplannedTransactions.length} transactions without budget items in ${esc(category.name)}, actual ${fmt(unplannedActual)}"><span class="entry-name"><span>Unplanned activity</span><small>${unplannedTransactions.length} ${unplannedTransactions.length === 1 ? 'transaction' : 'transactions'} without a budget item</small></span><span class="entry-due"></span><span class="entry-planned">—</span><span class="entry-actual">${fmt(unplannedActual)}</span></button>`
+          : ''}`
         : '<p class="category-empty">Nothing added yet</p>';
       return `<div class="sub-category"><div class="sub-category-title"><span>${esc(category.name)}</span><span class="sub-category-actions"><button class="text-action" data-action="add-entry" data-category="${esc(category.id)}">Add item</button>${g.id === 'income' ? '' : `<button class="text-action" data-action="add-expense-schedule" data-category="${esc(category.id)}">Schedule item</button>`}</span></div>${itemRows}</div>`;
     }).join('')
@@ -1818,6 +1836,24 @@ function transactionItemOptions(categoryId: string, selectedEntryId: string | nu
   const category = current()?.categories.find((item) => item.id === categoryId);
   return `<option value="" ${selectedEntryId ? '' : 'selected'}>No budget item — unplanned</option>${category?.entries.map((entry) => `<option value="${esc(entry.id)}" ${entry.id === selectedEntryId ? 'selected' : ''}>${esc(entry.name)}</option>`).join('') ?? ''}`;
 }
+function bulkTransactionItemOptions(categoryId: string, selectedEntryId?: string | null): string {
+  const category = current()?.categories.find((item) => item.id === categoryId);
+  const selectedUnplanned = selectedEntryId === null;
+  return `<option value="" disabled ${selectedEntryId === undefined ? 'selected' : ''}>Choose a budget item</option><option value="__unplanned__" ${selectedUnplanned ? 'selected' : ''}>No budget item — unplanned</option>${category?.entries.map((entry) => `<option value="${esc(entry.id)}" ${entry.id === selectedEntryId ? 'selected' : ''}>${esc(entry.name)}</option>`).join('') ?? ''}`;
+}
+function bulkTransactionEditDialog(): void {
+  const budget = current();
+  const selected = budget?.transactions.filter((transaction) => selectedTransactionIds.has(transaction.id)) ?? [];
+  if (!budget || !selected.length) return;
+  const categoryIds = new Set(selected.map((transaction) => transaction.categoryId));
+  const entryIds = new Set(selected.map((transaction) => transaction.entryId));
+  const categoryId = categoryIds.size === 1 ? selected[0].categoryId : '';
+  const entryId = categoryId && entryIds.size === 1 ? selected[0].entryId : undefined;
+  const itemOptions = categoryId
+    ? bulkTransactionItemOptions(categoryId, entryId)
+    : '<option value="" selected disabled>Choose a category first</option>';
+  open(`<form class="dialog-form bulk-transaction-edit-form" data-form="bulk-transaction-edit"><div class="dialog-topline"><span class="dialog-icon">⇄</span><button class="icon-button dialog-close" data-action="close" type="button" aria-label="Close">×</button></div><p class="panel-kicker">EDIT SELECTED ACTIVITY</p><h2>Edit category and budget item</h2><p class="dialog-copy">Apply one category and budget item to all ${selected.length} selected ${selected.length === 1 ? 'transaction' : 'transactions'}. This can be undone briefly after saving.</p><label for="bulk-transaction-category">Budget category</label><select id="bulk-transaction-category" name="categoryId" required><option value="" ${categoryId ? '' : 'selected'} disabled>Choose a category</option>${budget.categories.map((category) => `<option value="${esc(category.id)}" ${category.id === categoryId ? 'selected' : ''}>${esc(categoryOptionLabel(category))}</option>`).join('')}</select><label for="bulk-transaction-entry">Budget item</label><select id="bulk-transaction-entry" name="entryId" required ${categoryId ? '' : 'disabled'}>${itemOptions}</select><small class="transaction-item-help">Choose “No budget item — unplanned” when these transactions do not belong to a planned item.</small><div class="form-error" id="bulk-transaction-error" role="status" aria-live="polite"></div><div class="dialog-actions"><button class="button button-secondary" data-action="close" type="button">Cancel</button><button class="button button-primary" type="submit">Apply to selected</button></div></form>`);
+}
 function transactionGoalOptions(categoryId: string, entryId: string | null, selectedGoalId: string | null = null): string {
   const entry = current()?.categories.find((category) => category.id === categoryId)?.entries.find((item) => item.id === entryId);
   return `<option value="">Unassigned</option>${(entry?.goals ?? []).map((goal) => `<option value="${esc(goal.id)}" ${goal.id === selectedGoalId ? 'selected' : ''}>${esc(goal.name)}</option>`).join('')}`;
@@ -1953,6 +1989,14 @@ document.addEventListener('click', (event: MouseEvent) => {
     return;
   }
   if (action === 'add-setup-group') { addSetupGroup(); return; }
+  if (action === 'clear-transaction-filters') {
+    transactionSearch = '';
+    transactionCategoryFilter = 'all';
+    transactionItemFilter = 'all';
+    selectedTransactionIds.clear();
+    render();
+    return;
+  }
   if (action === 'navigate' && ['dashboard', 'transactions', 'subscriptions', 'review', 'reports', 'settings'].includes(button.dataset.page ?? '')) {
     document.body.classList.remove('mobile-nav-open');
     state.view = button.dataset.page as AppState['view'];
@@ -1960,6 +2004,16 @@ document.addEventListener('click', (event: MouseEvent) => {
     if (state.view === 'dashboard' || state.view === 'transactions') dashboardTab = state.view === 'transactions' ? 'transactions' : 'overview';
     render();
     if (!state.budgets.length && state.view !== 'settings') newBudgetDialog();
+    return;
+  }
+  if (action === 'view-unplanned' && category) {
+    transactionCategoryFilter = category;
+    transactionItemFilter = 'category-only';
+    transactionSearch = '';
+    transactionFiltersExpanded = true;
+    state.view = 'transactions';
+    dashboardTab = 'transactions';
+    render();
     return;
   }
   if (action === 'delete-budget') { void deleteBudget(); return; }
@@ -2017,6 +2071,10 @@ document.addEventListener('click', (event: MouseEvent) => {
     selectedTransactionIds.clear();
     root.querySelectorAll<HTMLInputElement>('.transaction-select').forEach((checkbox) => { checkbox.checked = false; });
     updateTransactionSelectionUI();
+  }
+  if (action === 'edit-selected') {
+    bulkTransactionEditDialog();
+    return;
   }
   if (action === 'delete-selected') {
     const budget = current();
@@ -2293,6 +2351,10 @@ dialog.addEventListener('change', (event: Event) => {
     const custom = target.value === 'custom';
     requiredElement<HTMLElement>(dialog, '#custom-type-field').hidden = !custom;
     requiredElement<HTMLInputElement>(dialog, '#custom-type').required = custom;
+  } else if (target.id === 'bulk-transaction-category') {
+    const itemSelect = requiredElement<HTMLSelectElement>(dialog, '#bulk-transaction-entry');
+    itemSelect.innerHTML = bulkTransactionItemOptions(target.value);
+    itemSelect.disabled = false;
   } else if (target.id === 'transaction-category') {
     requiredElement<HTMLSelectElement>(dialog, '#transaction-entry').innerHTML = transactionItemOptions(target.value);
     updateTransactionGoalField();
@@ -2456,6 +2518,50 @@ dialog.addEventListener('submit', (event: SubmitEvent) => {
       paused: existing?.paused ?? false,
     }, budget);
     persist(); dialog.close(); render();
+  } else if (form.dataset.form === 'bulk-transaction-edit') {
+    const budget = current();
+    const categoryId = String(data.get('categoryId') ?? '');
+    const selectedEntryId = String(data.get('entryId') ?? '');
+    const category = budget?.categories.find((item) => item.id === categoryId);
+    const entryId = selectedEntryId === '__unplanned__' ? null : selectedEntryId;
+    if (!budget || !category || (entryId && !category.entries.some((item) => item.id === entryId))) {
+      requiredElement<HTMLElement>(dialog, '#bulk-transaction-error').textContent = 'Choose a valid category and budget item.';
+      return;
+    }
+    const selected = budget.transactions.filter((transaction) => selectedTransactionIds.has(transaction.id));
+    if (!selected.length) {
+      dialog.close();
+      selectedTransactionIds.clear();
+      render();
+      return;
+    }
+    const previous = selected.map((transaction) => ({
+      id: transaction.id,
+      categoryId: transaction.categoryId,
+      entryId: transaction.entryId,
+      savingsGoalId: transaction.savingsGoalId ?? null,
+    }));
+    for (const transaction of selected) {
+      transaction.categoryId = category.id;
+      transaction.entryId = entryId;
+      const selectedEntry = category.entries.find((item) => item.id === entryId);
+      if (!selectedEntry?.goals?.some((goal) => goal.id === transaction.savingsGoalId)) transaction.savingsGoalId = null;
+    }
+    selectedTransactionIds.clear();
+    offerUndo(`Updated ${selected.length} ${selected.length === 1 ? 'transaction' : 'transactions'}`, () => {
+      for (const snapshot of previous) {
+        const transaction = budget.transactions.find((item) => item.id === snapshot.id);
+        if (!transaction) continue;
+        transaction.categoryId = snapshot.categoryId;
+        transaction.entryId = snapshot.entryId;
+        transaction.savingsGoalId = snapshot.savingsGoalId;
+      }
+      persist();
+      render();
+    });
+    persist();
+    dialog.close();
+    render();
   } else if (form.dataset.form === 'transaction') {
     const budget = current();
     if (!budget) return;
