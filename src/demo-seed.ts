@@ -11,12 +11,12 @@ type Item = [name: string, planned: number, actual: number, dueDay?: number];
 type Plan = Record<string, Array<[category: string, items: Item[]]>>;
 
 const PLAN: Plan = {
-  income: [['Paychecks', [['Paycheck - Acme Co', 4200, 4200], ['Side projects', 400, 350]]]],
-  bills: [['Home', [['Rent', 1450, 1450, 1], ['Electric', 95, 88, 12], ['Internet', 65, 65, 15]]]],
-  expenses: [['Everyday', [['Groceries', 520, 0], ['Dining out', 160, 0], ['Fuel', 120, 0], ['Fun money', 100, 0]]]],
-  subscriptions: [['Streaming & apps', [['Streaming', 16, 16, 8], ['Music', 11, 11, 20], ['Cloud storage', 3, 3, 25]]]],
-  debts: [['Loans', [['Car loan', 310, 310, 5]]]],
-  savings: [['Goals', [['Emergency fund', 300, 300], ['Vacation', 150, 150]]]],
+  income: [['Income', [['Paycheck - Acme Co', 4200, 4200], ['Side projects', 400, 350]]]],
+  bills: [['Bills', [['Rent', 1450, 1450, 1], ['Electric', 95, 88, 12], ['Internet', 65, 65, 15]]]],
+  expenses: [['Expenses', [['Groceries', 520, 0], ['Dining out', 160, 0], ['Fuel', 120, 0], ['Fun money', 100, 0]]]],
+  subscriptions: [['Subscriptions', [['Streaming', 16, 16, 8], ['Music', 11, 11, 20], ['Cloud storage', 3, 3, 25]]]],
+  debts: [['Debts', [['Car loan', 310, 310, 5]]]],
+  savings: [['Savings', [['Emergency fund', 300, 300], ['Vacation', 150, 150]]]],
 };
 
 function buildBudget(offset: number, seriesId: string) {
